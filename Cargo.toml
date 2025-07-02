@@ -1,0 +1,31 @@
+[package]
+name = "gold_k"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.7", features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "macros",
+    "time",
+    "uuid",
+] }
+askama = "0.12"
+askama_axum = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+time = "0.3"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+dotenv = "0.15"

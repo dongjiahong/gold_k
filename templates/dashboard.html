@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate.io K线监控工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .nav-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .nav-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            text-decoration: none;
+            color: #fff;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .nav-card:hover {
+            transform: translateY(-5px);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .nav-card-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            display: block;
+        }
+
+        .nav-card h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+
+        .nav-card p {
+            opacity: 0.8;
+            line-height: 1.5;
+        }
+
+        .status-section {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .status-section h2 {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .status-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .status-value {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            opacity: 0.8;
+            font-size: 0.9em;
+        }
+
+        .status-running {
+            color: #4CAF50;
+        }
+
+        .status-stopped {
+            color: #f44336;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .nav-cards {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .nav-card {
+                padding: 20px;
+            }
+
+            .nav-card-icon {
+                font-size: 2.5em;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Gate.io K线监控工具</h1>
+            <p>专业的加密货币技术分析与自动交易系统</p>
+        </div>
+
+        <div class="nav-cards">
+            <a href="/monitor" class="nav-card">
+                <span class="nav-card-icon">🔍</span>
+                <h3>信号监控</h3>
+                <p>配置监控参数，实时检测K线影线信号，支持多币种独立监控和自动交易</p>
+            </a>
+
+            <a href="/keys" class="nav-card">
+                <span class="nav-card-icon">🔑</span>
+                <h3>密钥管理</h3>
+                <p>管理Gate.io API密钥和钉钉通知配置，确保数据安全和消息推送正常</p>
+            </a>
+
+            <a href="#results" class="nav-card" onclick="loadResults()">
+                <span class="nav-card-icon">📈</span>
+                <h3>监控结果</h3>
+                <p>查看历史信号记录和交易记录，分析监控效果和策略表现</p>
+            </a>
+        </div>
+
+        <div class="status-section">
+            <h2>📊 系统状态</h2>
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-value" id="monitor-status">-</div>
+                    <div class="status-label">监控状态</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="active-symbols">-</div>
+                    <div class="status-label">活跃监控币种</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="total-signals">-</div>
+                    <div class="status-label">总信号数</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-value" id="total-orders">-</div>
+                    <div class="status-label">总订单数</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 加载系统状态
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/monitor/status');
+                const status = await response.json();
+
+                document.getElementById('monitor-status').textContent = status.is_running ? '运行中' : '已停止';
+                document.getElementById('monitor-status').className = 'status-value ' + (status.is_running ? 'status-running' : 'status-stopped');
+                document.getElementById('active-symbols').textContent = status.active_symbols.length;
+                document.getElementById('total-signals').textContent = status.total_signals;
+                document.getElementById('total-orders').textContent = status.total_orders;
+            } catch (error) {
+                console.error('Failed to load status:', error);
+            }
+        }
+
+        // 页面加载时获取状态
+        loadStatus();
+
+        // 每30秒刷新一次状态
+        setInterval(loadStatus, 30000);
+
+        // 跳转到监控结果（这里简化处理，实际应该是独立页面）
+        function loadResults() {
+            window.location.href = '/monitor#results';
+        }
+    </script>
+</body>
+
+</html>
