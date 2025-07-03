@@ -1,6 +1,7 @@
 use std::{env, str::FromStr, sync::Arc};
 
 use tokio::{fs, sync::OnceCell};
+use tracing::debug;
 use validator::Validate;
 #[derive(Debug, Clone, Validate, serde::Deserialize)]
 pub struct Config {
@@ -20,6 +21,7 @@ pub static GLOBAL_CONFIG: OnceCell<Arc<Config>> = OnceCell::const_new();
 
 pub async fn get_global_config() -> &'static Arc<Config> {
     let config_url = env::var("GOLD_K_CONFIG").expect("GOLD_K_CONFIG is not set");
+    debug!("Loading global config from {}", config_url);
     GLOBAL_CONFIG
         .get_or_init(|| async {
             Arc::new(

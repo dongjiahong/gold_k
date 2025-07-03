@@ -27,3 +27,4 @@ target
 app.toml
 config.toml
 .env
+data

@@ -1,3 +1,5 @@
+use std::env;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use gold_k::{config, web};
@@ -33,6 +35,12 @@ async fn main() -> Result<()> {
     let config_path = cli.config;
     let c: config::Config = fs::read_to_string(&config_path).await?.parse()?;
     c.validate()?;
+    // set GOLD_K_CONFIG env
+    unsafe {
+        env::set_var("GOLD_K_CONFIG", &config_path);
+    }
+
+    tracing::info!("Configuration loaded successfully, config: {:?}", c);
 
     match cli.command {
         Commands::Web => {
