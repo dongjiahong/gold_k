@@ -256,7 +256,7 @@
         <div id="message-container"></div>
 
         <div class="section">
-            <h2>📝 添加新密钥</h2>
+            <h2>📝 API配置</h2>
             <form id="key-form">
                 <div class="form-group">
                     <label for="key-name">配置名称</label>
@@ -279,15 +279,21 @@
                         placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."></textarea>
                 </div>
 
+                <div class="form-group">
+                    <label for="cookie">Cookie (可选)</label>
+                    <textarea id="cookie" rows="3" placeholder="用于调用Gate.io V2接口的浏览器Cookie"></textarea>
+                </div>
+
                 <button type="submit" class="btn btn-primary">保存配置</button>
                 <button type="button" class="btn btn-secondary" onclick="testDingTalk()">测试钉钉通知</button>
+                <button type="button" class="btn btn-secondary" onclick="fetchContracts()">拉取合约</button>
             </form>
         </div>
 
         <div class="section">
-            <h2>📋 已保存的密钥</h2>
+            <h2>📋 当前配置</h2>
             <div class="loading" id="loading">加载中...</div>
-            <div id="key-list" class="key-list"></div>
+            <div id="current-config" class="key-list"></div>
         </div>
     </div>
 
@@ -301,48 +307,55 @@
             }, 5000);
         }
 
-        // 加载密钥列表
-        async function loadKeys() {
+        // 加载当前配置
+        async function loadCurrentConfig() {
             const loadingEl = document.getElementById('loading');
-            const listEl = document.getElementById('key-list');
+            const configEl = document.getElementById('current-config');
 
             loadingEl.style.display = 'block';
-            listEl.innerHTML = '';
+            configEl.innerHTML = '';
 
             try {
-                const response = await fetch('/api/keys');
-                const keys = await response.json();
+                const response = await fetch('/api/keys/current');
+                if (response.ok) {
+                    const config = await response.json();
+                    if (config) {
+                        // 填充表单
+                        document.getElementById('key-name').value = config.name;
+                        document.getElementById('api-key').value = config.api_key;
+                        document.getElementById('secret-key').value = config.secret_key;
+                        document.getElementById('webhook-url').value = config.webhook_url || '';
+                        document.getElementById('cookie').value = config.cookie || '';
 
-                if (keys.length === 0) {
-                    listEl.innerHTML = '<p style="text-align: center; opacity: 0.7;">暂无保存的密钥</p>';
-                } else {
-                    listEl.innerHTML = keys.map(key => `
-                        <div class="key-item ${key.is_active ? 'active' : ''}">
-                            <div class="key-item-header">
-                                <div class="key-item-name">${key.name}</div>
-                                <div class="key-item-status ${key.is_active ? 'status-active' : 'status-inactive'}">
-                                    ${key.is_active ? '活跃' : '未激活'}
+                        // 显示当前配置信息
+                        configEl.innerHTML = `
+                            <div class="key-item active">
+                                <div class="key-item-header">
+                                    <div class="key-item-name">${config.name}</div>
+                                    <div class="key-item-status status-active">当前配置</div>
+                                </div>
+                                <div class="key-item-info">
+                                    API Key: ${config.api_key.substring(0, 10)}...<br>
+                                    ${config.webhook_url ? '钉钉通知: 已配置' : '钉钉通知: 未配置'}<br>
+                                    ${config.cookie ? 'Cookie: 已配置' : 'Cookie: 未配置'}<br>
+                                    ${config.contracts ? '合约数据: 已缓存' : '合约数据: 未缓存'}
                                 </div>
                             </div>
-                            <div class="key-item-info">
-                                API Key: ${key.api_key.substring(0, 10)}...
-                                ${key.webhook_url ? '<br>钉钉通知: 已配置' : '<br>钉钉通知: 未配置'}
-                            </div>
-                            <div class="key-item-actions">
-                                ${!key.is_active ? `<button class="btn btn-primary" onclick="activateKey(${key.id})">激活</button>` : ''}
-                                <button class="btn btn-danger" onclick="deleteKey(${key.id})">删除</button>
-                            </div>
-                        </div>
-                    `).join('');
+                        `;
+                    } else {
+                        configEl.innerHTML = '<p style="text-align: center; opacity: 0.7;">暂无配置，请添加API配置</p>';
+                    }
+                } else {
+                    configEl.innerHTML = '<p style="text-align: center; opacity: 0.7;">暂无配置，请添加API配置</p>';
                 }
             } catch (error) {
-                showMessage('加载密钥失败: ' + error.message, 'error');
+                showMessage('加载配置失败: ' + error.message, 'error');
             } finally {
                 loadingEl.style.display = 'none';
             }
         }
 
-        // 保存密钥
+        // 保存配置
         document.getElementById('key-form').addEventListener('submit', async (e) => {
             e.preventDefault();
 
@@ -350,7 +363,8 @@
                 name: document.getElementById('key-name').value,
                 api_key: document.getElementById('api-key').value,
                 secret_key: document.getElementById('secret-key').value,
-                webhook_url: document.getElementById('webhook-url').value || null
+                webhook_url: document.getElementById('webhook-url').value || null,
+                cookie: document.getElementById('cookie').value || null
             };
 
             try {
@@ -363,9 +377,8 @@
                 });
 
                 if (response.ok) {
-                    showMessage('密钥保存成功！');
-                    document.getElementById('key-form').reset();
-                    loadKeys();
+                    showMessage('配置保存成功！');
+                    loadCurrentConfig();
                 } else {
                     const error = await response.text();
                     showMessage('保存失败: ' + error, 'error');
@@ -375,45 +388,24 @@
             }
         });
 
-        // 激活密钥
-        async function activateKey(id) {
+        // 拉取合约数据
+        async function fetchContracts() {
             try {
-                const response = await fetch(`/api/keys/${id}/activate`, {
+                showMessage('正在拉取合约数据...', 'success');
+                const response = await fetch('/api/contracts/fetch', {
                     method: 'POST'
                 });
 
                 if (response.ok) {
-                    showMessage('密钥激活成功！');
-                    loadKeys();
+                    const result = await response.json();
+                    showMessage(`合约数据拉取成功！共获取${result.count}个合约`);
+                    loadCurrentConfig();
                 } else {
                     const error = await response.text();
-                    showMessage('激活失败: ' + error, 'error');
+                    showMessage('拉取失败: ' + error, 'error');
                 }
             } catch (error) {
-                showMessage('激活失败: ' + error.message, 'error');
-            }
-        }
-
-        // 删除密钥
-        async function deleteKey(id) {
-            if (!confirm('确定要删除这个密钥配置吗？')) {
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/keys/${id}`, {
-                    method: 'POST'
-                });
-
-                if (response.ok) {
-                    showMessage('密钥删除成功！');
-                    loadKeys();
-                } else {
-                    const error = await response.text();
-                    showMessage('删除失败: ' + error, 'error');
-                }
-            } catch (error) {
-                showMessage('删除失败: ' + error.message, 'error');
+                showMessage('拉取失败: ' + error.message, 'error');
             }
         }
 
@@ -433,8 +425,8 @@
             }
         }
 
-        // 页面加载时获取密钥列表
-        loadKeys();
+        // 页面加载时获取当前配置
+        loadCurrentConfig();
     </script>
 </body>
 

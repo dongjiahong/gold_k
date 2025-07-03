@@ -1,13 +1,15 @@
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, FromRow)]
 pub struct ApiKey {
     pub id: i64,
     pub name: String,
     pub api_key: String,
     pub secret_key: String,
-    pub webhook_url: Option<String>,
+    pub webhook_url: Option<String>, // 钉钉的webhook url
+    pub cookie: Option<String>,      // 浏览器cookie 方便调用gate的v2接口
+    pub contracts: Option<String>,   // 存放合约数据
     pub is_active: bool,
     pub created_at: i64,
     pub updated_at: i64,
@@ -86,6 +88,7 @@ pub struct MonitorStatus {
     pub last_check: Option<i64>,
     pub total_signals: i64,
     pub total_orders: i64,
+    pub total_contracts: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

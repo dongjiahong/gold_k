@@ -199,6 +199,10 @@
                     <div class="status-value" id="total-orders">-</div>
                     <div class="status-label">总订单数</div>
                 </div>
+                <div class="status-item">
+                    <div class="status-value" id="total-contracts">-</div>
+                    <div class="status-label">合约总数</div>
+                </div>
             </div>
         </div>
     </div>
@@ -215,6 +219,7 @@
                 document.getElementById('active-symbols').textContent = status.active_symbols.length;
                 document.getElementById('total-signals').textContent = status.total_signals;
                 document.getElementById('total-orders').textContent = status.total_orders;
+                document.getElementById('total-contracts').textContent = status.total_contracts;
             } catch (error) {
                 console.error('Failed to load status:', error);
             }

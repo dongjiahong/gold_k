@@ -1,6 +1,7 @@
 use crate::models::*;
 use crate::services::{DingTalkService, GateService};
 use anyhow::{Result, anyhow};
+use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -16,6 +17,13 @@ pub struct MonitorService {
     active_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     gate_service: Arc<RwLock<GateService>>,
     dingtalk_service: Arc<RwLock<DingTalkService>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct Contract {
+    pub order_price_round: String, // 合约价格精度
+    pub quanto_multiplier: String, // 合约数量乘数
+    pub name: String,              // 合约名称, BTC_USDT
 }
 
 impl MonitorService {
@@ -109,12 +117,32 @@ impl MonitorService {
             None
         };
 
+        let api_key =
+            sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
+                .fetch_one(&self.db)
+                .await
+                .unwrap_or_default();
+
+        // json反序列化api_key.contracts
+        let mut total_contracts = 0;
+        if let Some(contracts_str) = &api_key.contracts {
+            let contracts: Vec<Contract> = serde_json::from_str(contracts_str).unwrap_or_default();
+            total_contracts = contracts.len() as i64;
+            debug!(
+                "total contracts: {:?}, contracts: {:?}",
+                total_contracts, contracts_str
+            );
+        } else {
+            warn!("No contracts found for API Key: {:?}", api_key);
+        }
+
         MonitorStatus {
             is_running,
             active_symbols,
             last_check,
             total_signals,
             total_orders,
+            total_contracts,
         }
     }
 
@@ -143,6 +171,18 @@ impl MonitorService {
             if let Some(webhook_url) = &key.webhook_url {
                 let mut dingtalk_service = self.dingtalk_service.write().await;
                 dingtalk_service.set_webhook_url(webhook_url);
+            }
+
+            // 更新cookie
+            if let Some(cookie) = &key.cookie {
+                let mut gate_service = self.gate_service.write().await;
+                gate_service.set_cookie(cookie);
+            }
+
+            // 更新合约数据
+            if let Some(contracts) = &key.contracts {
+                let mut gate_service = self.gate_service.write().await;
+                gate_service.set_contracts(contracts);
             }
 
             Ok(())

@@ -7,7 +7,7 @@ use serde_urlencoded;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{debug, warn};
+use tracing::debug;
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -17,6 +17,8 @@ pub struct GateService {
     api_key: Option<String>,
     secret_key: Option<String>,
     base_url: String,
+    cookie: Option<String>,
+    contracts: Option<String>,
 }
 
 impl GateService {
@@ -26,12 +28,22 @@ impl GateService {
             api_key: None,
             secret_key: None,
             base_url: "https://api.gateio.ws/api/v4".to_string(),
+            cookie: None,
+            contracts: None,
         }
     }
 
     pub fn update_credentials(&mut self, api_key: &str, secret_key: &str) {
         self.api_key = Some(api_key.to_string());
         self.secret_key = Some(secret_key.to_string());
+    }
+
+    pub fn set_cookie(&mut self, cookie: &str) {
+        self.cookie = Some(cookie.to_string());
+    }
+
+    pub fn set_contracts(&mut self, contracts: &str) {
+        self.contracts = Some(contracts.to_string());
     }
 
     pub fn has_credentials(&self) -> bool {
@@ -137,50 +149,45 @@ impl GateService {
 
         let data: Value = serde_json::from_str(&response_text)?;
 
-        // Gate.io K线数据格式: [timestamp, volume, close, high, low, open, ...]
+        // Gate.io K线数据格式: [{"o":"","t":1234, "c":"", "l": "", "h": "", "v": 1 }]
         let klines = data
             .as_array()
             .ok_or_else(|| anyhow!("Invalid response format"))?;
 
         let mut result = Vec::new();
         for kline in klines {
-            let kline_array = kline
-                .as_array()
+            let kline_obj = kline
+                .as_object()
                 .ok_or_else(|| anyhow!("Invalid kline format"))?;
 
-            if kline_array.len() < 6 {
-                warn!("Incomplete kline data: {:?}", kline_array);
-                continue;
-            }
-
-            let timestamp = kline_array[0]
-                .as_str()
-                .and_then(|s| s.parse::<i64>().ok())
+            let timestamp = kline_obj
+                .get("t")
+                .and_then(|t| t.as_i64())
                 .ok_or_else(|| anyhow!("Invalid timestamp"))?;
 
-            let volume = kline_array[1]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
+            let volume = kline_obj
+                .get("v")
+                .and_then(|v| v.as_f64())
                 .ok_or_else(|| anyhow!("Invalid volume"))?;
 
-            let close = kline_array[2]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
+            let close = kline_obj
+                .get("c")
+                .and_then(|c| c.as_str().and_then(|s| s.parse::<f64>().ok()))
                 .ok_or_else(|| anyhow!("Invalid close price"))?;
 
-            let high = kline_array[3]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
+            let high = kline_obj
+                .get("h")
+                .and_then(|h| h.as_str().and_then(|s| s.parse::<f64>().ok()))
                 .ok_or_else(|| anyhow!("Invalid high price"))?;
 
-            let low = kline_array[4]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
+            let low = kline_obj
+                .get("l")
+                .and_then(|l| l.as_str().and_then(|s| s.parse::<f64>().ok()))
                 .ok_or_else(|| anyhow!("Invalid low price"))?;
 
-            let open = kline_array[5]
-                .as_str()
-                .and_then(|s| s.parse::<f64>().ok())
+            let open = kline_obj
+                .get("o")
+                .and_then(|o| o.as_str().and_then(|s| s.parse::<f64>().ok()))
                 .ok_or_else(|| anyhow!("Invalid open price"))?;
 
             result.push(KlineData {

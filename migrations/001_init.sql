@@ -42,6 +42,8 @@ CREATE TABLE IF NOT EXISTS api_keys (
     api_key TEXT NOT NULL,
     secret_key TEXT NOT NULL,
     webhook_url TEXT,
+    cookie TEXT, -- 浏览器cookie 方便调用gate的v2 接口
+    contracts TEXT, -- 存放合约数据
     is_active BOOLEAN NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
