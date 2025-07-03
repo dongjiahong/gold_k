@@ -1,11 +1,12 @@
+use askama::Template;
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::{get, post},
-    Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -13,13 +14,9 @@ use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::{info, warn};
 
-mod models;
-mod services;
-mod templates;
-
-use models::*;
-use services::*;
-use templates::*;
+use crate::services::*;
+use crate::templates::*;
+use crate::{config::get_global_config, models::*};
 
 pub type AppState = Arc<AppStateInner>;
 
@@ -29,17 +26,13 @@ pub struct AppStateInner {
     pub monitor_service: RwLock<MonitorService>,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    dotenv::dotenv().ok();
-    tracing_subscriber::init();
-
+pub async fn start() -> anyhow::Result<()> {
     // 初始化数据库
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db = SqlitePool::connect(&database_url).await?;
+    let c = get_global_config().await;
+    let db = SqlitePool::connect(&c.database_url).await?;
 
     // 运行数据库迁移
-    sqlx::migrate!("./migrations").run(&db).await?;
+    sqlx::migrate!("../migrations").run(&db).await?;
 
     // 初始化服务
     let gate_service = GateService::new();

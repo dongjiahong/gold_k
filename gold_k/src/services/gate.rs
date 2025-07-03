@@ -1,9 +1,10 @@
 use crate::models::KlineData;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use hmac::{Hmac, Mac};
 use reqwest::Client;
 use serde_json::Value;
-use sha2::Sha512;
+use serde_urlencoded;
+use sha2::{Digest, Sha512};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
@@ -82,14 +83,13 @@ impl GateService {
         limit: usize,
         settle: &str,
     ) -> Result<Vec<KlineData>> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
+        let limit_str = limit.to_string();
         let mut query_params = HashMap::new();
         query_params.insert("contract", symbol);
         query_params.insert("interval", interval);
-        query_params.insert("limit", &limit.to_string());
+        query_params.insert("limit", &limit_str);
 
         let query_string = serde_urlencoded::to_string(&query_params)?;
         let url_path = format!("/futures/{}/candlesticks", settle);
@@ -128,11 +128,15 @@ impl GateService {
         debug!("Response body: {}", response_text);
 
         if !status.is_success() {
-            return Err(anyhow!("API request failed: {} - {}", status, response_text));
+            return Err(anyhow!(
+                "API request failed: {} - {}",
+                status,
+                response_text
+            ));
         }
 
         let data: Value = serde_json::from_str(&response_text)?;
-        
+
         // Gate.io K线数据格式: [timestamp, volume, close, high, low, open, ...]
         let klines = data
             .as_array()
@@ -193,9 +197,7 @@ impl GateService {
     }
 
     pub async fn get_contracts(&self, settle: &str) -> Result<Vec<Value>> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let url_path = format!("/futures/{}/contracts", settle);
         let url = format!("{}{}", self.base_url, url_path);
@@ -228,7 +230,11 @@ impl GateService {
         let response_text = response.text().await?;
 
         if !status.is_success() {
-            return Err(anyhow!("API request failed: {} - {}", status, response_text));
+            return Err(anyhow!(
+                "API request failed: {} - {}",
+                status,
+                response_text
+            ));
         }
 
         let contracts: Vec<Value> = serde_json::from_str(&response_text)?;
@@ -243,9 +249,7 @@ impl GateService {
         price: Option<f64>,
         settle: &str,
     ) -> Result<Value> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)?
-            .as_secs();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
         let mut order_data = serde_json::json!({
             "contract": symbol,
@@ -294,7 +298,11 @@ impl GateService {
         let response_text = response.text().await?;
 
         if !status.is_success() {
-            return Err(anyhow!("API request failed: {} - {}", status, response_text));
+            return Err(anyhow!(
+                "API request failed: {} - {}",
+                status,
+                response_text
+            ));
         }
 
         let result: Value = serde_json::from_str(&response_text)?;

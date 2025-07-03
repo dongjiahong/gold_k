@@ -1,12 +1,12 @@
 use crate::models::*;
 use crate::services::{DingTalkService, GateService};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration, interval};
 use tracing::{debug, error, info, warn};
 
 #[derive(Debug, Clone)]
@@ -50,11 +50,17 @@ impl MonitorService {
         // 为每个配置启动监控任务
         let mut tasks = self.active_tasks.write().await;
         for config in configs {
-            let task_handle = self.start_symbol_monitor(config).await;
-            tasks.insert(format!("{}_{}", config.symbol, config.interval_type), task_handle);
+            let task_handle = self.start_symbol_monitor(config.clone()).await;
+            tasks.insert(
+                format!("{}_{}", config.symbol, config.interval_type),
+                task_handle,
+            );
         }
 
-        info!("Monitor service started with {} active configurations", tasks.len());
+        info!(
+            "Monitor service started with {} active configurations",
+            tasks.len()
+        );
         Ok(())
     }
 
@@ -113,22 +119,20 @@ impl MonitorService {
     }
 
     async fn get_active_configs(&self) -> Result<Vec<MonitorConfig>> {
-        let configs = sqlx::query_as::<_, MonitorConfig>(
-            "SELECT * FROM monitor_configs WHERE is_active = 1"
-        )
-        .fetch_all(&self.db)
-        .await?;
+        let configs =
+            sqlx::query_as::<_, MonitorConfig>("SELECT * FROM monitor_configs WHERE is_active = 1")
+                .fetch_all(&self.db)
+                .await?;
 
         Ok(configs)
     }
 
     async fn update_services(&self) -> Result<()> {
         // 获取活跃的API密钥
-        let api_key = sqlx::query_as::<_, ApiKey>(
-            "SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1"
-        )
-        .fetch_optional(&self.db)
-        .await?;
+        let api_key =
+            sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
+                .fetch_optional(&self.db)
+                .await?;
 
         if let Some(key) = api_key {
             // 更新Gate服务配置
@@ -164,12 +168,9 @@ impl MonitorService {
                     break;
                 }
 
-                if let Err(e) = Self::check_symbol_signals(
-                    &db,
-                    &gate_service,
-                    &dingtalk_service,
-                    &config,
-                ).await {
+                if let Err(e) =
+                    Self::check_symbol_signals(&db, &gate_service, &dingtalk_service, &config).await
+                {
                     error!("Error checking signals for {}: {}", config.symbol, e);
                 }
             }
@@ -182,7 +183,10 @@ impl MonitorService {
         dingtalk_service: &Arc<RwLock<DingTalkService>>,
         config: &MonitorConfig,
     ) -> Result<()> {
-        debug!("Checking signals for {} on {}", config.symbol, config.interval_type);
+        debug!(
+            "Checking signals for {} on {}",
+            config.symbol, config.interval_type
+        );
 
         // 获取K线数据
         let gate = gate_service.read().await;
@@ -213,7 +217,10 @@ impl MonitorService {
             .await?;
 
             if existing_signal > 0 {
-                debug!("Signal already recorded for {} at {}", config.symbol, signal.timestamp);
+                debug!(
+                    "Signal already recorded for {} at {}",
+                    config.symbol, signal.timestamp
+                );
                 return Ok(());
             }
 
@@ -269,7 +276,7 @@ impl MonitorService {
         // 检查是否有长影线
         let has_long_upper = upper_shadow > body_length * config.main_shadow_body_ratio;
         let has_long_lower = lower_shadow > body_length * config.main_shadow_body_ratio;
-        
+
         if !has_long_upper && !has_long_lower {
             return None;
         }
@@ -277,14 +284,46 @@ impl MonitorService {
         // 确定主影线类型和长度
         let (shadow_type, main_shadow_length, shadow_ratio) = if has_long_upper && has_long_lower {
             if upper_shadow >= lower_shadow {
-                ("upper", upper_shadow, if lower_shadow > 0.0 { upper_shadow / lower_shadow } else { upper_shadow })
+                (
+                    "upper",
+                    upper_shadow,
+                    if lower_shadow > 0.0 {
+                        upper_shadow / lower_shadow
+                    } else {
+                        upper_shadow
+                    },
+                )
             } else {
-                ("lower", lower_shadow, if upper_shadow > 0.0 { lower_shadow / upper_shadow } else { lower_shadow })
+                (
+                    "lower",
+                    lower_shadow,
+                    if upper_shadow > 0.0 {
+                        lower_shadow / upper_shadow
+                    } else {
+                        lower_shadow
+                    },
+                )
             }
         } else if has_long_upper {
-            ("upper", upper_shadow, if lower_shadow > 0.0 { upper_shadow / lower_shadow } else { upper_shadow })
+            (
+                "upper",
+                upper_shadow,
+                if lower_shadow > 0.0 {
+                    upper_shadow / lower_shadow
+                } else {
+                    upper_shadow
+                },
+            )
         } else {
-            ("lower", lower_shadow, if upper_shadow > 0.0 { lower_shadow / upper_shadow } else { lower_shadow })
+            (
+                "lower",
+                lower_shadow,
+                if upper_shadow > 0.0 {
+                    lower_shadow / upper_shadow
+                } else {
+                    lower_shadow
+                },
+            )
         };
 
         // 检查影线比例是否满足条件
@@ -294,7 +333,12 @@ impl MonitorService {
 
         // 计算平均成交量
         let avg_volume = if historical.len() > 10 {
-            historical.iter().skip(historical.len() - 10).map(|k| k.volume).sum::<f64>() / 10.0
+            historical
+                .iter()
+                .skip(historical.len() - 10)
+                .map(|k| k.volume)
+                .sum::<f64>()
+                / 10.0
         } else {
             historical.iter().map(|k| k.volume).sum::<f64>() / historical.len() as f64
         };
@@ -307,7 +351,11 @@ impl MonitorService {
         }
 
         // 确定K线类型
-        let candle_type = if latest.close > latest.open { "bull" } else { "bear" };
+        let candle_type = if latest.close > latest.open {
+            "bull"
+        } else {
+            "bear"
+        };
 
         Some(Signal {
             id: 0, // 将在数据库插入时设置
@@ -366,7 +414,7 @@ impl MonitorService {
         let confidence = if signal.shadow_ratio >= 3.0 && signal.volume_multiplier >= 2.0 {
             "high"
         } else if signal.shadow_ratio >= 2.0 && signal.volume_multiplier >= 1.5 {
-            "medium" 
+            "medium"
         } else {
             "low"
         };
@@ -421,9 +469,17 @@ impl MonitorService {
         Ok(result.last_insert_rowid())
     }
 
-    async fn save_order(db: &SqlitePool, trading_signal: &TradingSignal, signal_id: i64) -> Result<()> {
-        let side = if trading_signal.signal_type == "long" { "buy" } else { "sell" };
-        
+    async fn save_order(
+        db: &SqlitePool,
+        trading_signal: &TradingSignal,
+        signal_id: i64,
+    ) -> Result<()> {
+        let side = if trading_signal.signal_type == "long" {
+            "buy"
+        } else {
+            "sell"
+        };
+
         sqlx::query(
             r#"
             INSERT INTO orders (
@@ -438,7 +494,10 @@ impl MonitorService {
         .bind(trading_signal.entry_price)
         .bind(trading_signal.take_profit)
         .bind(trading_signal.stop_loss)
-        .bind((trading_signal.take_profit - trading_signal.entry_price).abs() / (trading_signal.entry_price - trading_signal.stop_loss).abs())
+        .bind(
+            (trading_signal.take_profit - trading_signal.entry_price).abs()
+                / (trading_signal.entry_price - trading_signal.stop_loss).abs(),
+        )
         .bind(signal_id)
         .bind(trading_signal.timestamp)
         .execute(db)
