@@ -53,7 +53,7 @@ impl MonitorService {
         self.update_services().await?;
 
         *is_running = true;
-        drop(is_running);
+        drop(is_running); // 释放所有权
 
         // 为每个配置启动监控任务
         let mut tasks = self.active_tasks.write().await;
@@ -164,25 +164,25 @@ impl MonitorService {
 
         if let Some(key) = api_key {
             // 更新Gate服务配置
-            let mut gate_service = self.gate_service.write().await;
-            gate_service.update_credentials(&key.api_key, &key.secret_key);
+            {
+                let mut gate_service = self.gate_service.write().await;
+                gate_service.update_credentials(&key.api_key, &key.secret_key);
+
+                // 更新cookie
+                if let Some(cookie) = &key.cookie {
+                    gate_service.set_cookie(cookie);
+                }
+
+                // 更新合约数据
+                if let Some(contracts) = &key.contracts {
+                    gate_service.set_contracts(contracts);
+                }
+            }
 
             // 更新钉钉服务配置
             if let Some(webhook_url) = &key.webhook_url {
                 let mut dingtalk_service = self.dingtalk_service.write().await;
                 dingtalk_service.set_webhook_url(webhook_url);
-            }
-
-            // 更新cookie
-            if let Some(cookie) = &key.cookie {
-                let mut gate_service = self.gate_service.write().await;
-                gate_service.set_cookie(cookie);
-            }
-
-            // 更新合约数据
-            if let Some(contracts) = &key.contracts {
-                let mut gate_service = self.gate_service.write().await;
-                gate_service.set_contracts(contracts);
             }
 
             Ok(())
@@ -197,6 +197,7 @@ impl MonitorService {
         let dingtalk_service = self.dingtalk_service.clone();
         let is_running = self.is_running.clone();
 
+        info!("Starting symbol monitor for {}", config.symbol);
         tokio::spawn(async move {
             let mut interval_timer = interval(Duration::from_secs(config.frequency as u64));
 
@@ -205,6 +206,7 @@ impl MonitorService {
 
                 // 检查是否应该继续运行
                 if !*is_running.read().await {
+                    warn!("Symbol monitor for {} is stopping", config.symbol);
                     break;
                 }
 
@@ -223,7 +225,7 @@ impl MonitorService {
         dingtalk_service: &Arc<RwLock<DingTalkService>>,
         config: &MonitorConfig,
     ) -> Result<()> {
-        debug!(
+        info!(
             "Checking signals for {} on {}",
             config.symbol, config.interval_type
         );
