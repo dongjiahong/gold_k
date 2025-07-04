@@ -372,7 +372,7 @@ async fn get_current_api_key(State(state): State<AppState>) -> impl IntoResponse
 }
 
 async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
-    // 获取当前活跃的API配置, 且更新时间在10分钟内的直接返回结果
+    // 获取当前活跃的API配置
     let current_key =
         match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
             .fetch_optional(&state.db)
