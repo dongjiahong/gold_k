@@ -390,7 +390,10 @@ impl MonitorService {
 
         // 阴线/实体不符合
         if !has_long_upper && !has_long_lower {
-            warn!("shadow body ratio < {} ", config.main_shadow_body_ratio);
+            warn!(
+                "signal: {} shadow body ratio < {} ",
+                config.symbol, config.main_shadow_body_ratio
+            );
             return None;
         }
 
