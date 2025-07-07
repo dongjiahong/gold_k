@@ -315,4 +315,93 @@ impl GateService {
         let result: Value = serde_json::from_str(&response_text)?;
         Ok(result)
     }
+
+    /// 使用Web API进行止盈止损下单
+    pub async fn place_order_with_stop_profit_loss(
+        &self,
+        order_data: Value,
+        settle: &str,
+    ) -> Result<Value> {
+        let web_api_url = format!(
+            "https://www.gate.com/apiw/v2/futures/{}/price_orders/order_stop_order",
+            settle
+        );
+
+        // 检查是否有cookie和contracts（作为CSRF token）
+        let cookie_string = self
+            .cookie
+            .as_ref()
+            .ok_or_else(|| anyhow!("Cookie未设置，请确保已在gate.com上登录"))?;
+
+        let csrf_token = self.set_web_credentials()?;
+
+        let body = serde_json::to_string(&order_data)?;
+
+        debug!("使用Web API进行止盈止损下单: {}", body);
+        debug!("CSRF Token: {}", csrf_token);
+        debug!("Request URL: {}", web_api_url);
+
+        let response = self
+            .client
+            .post(&web_api_url)
+            .header("Content-Type", "application/json")
+            .header("Origin", "https://www.gate.com")
+            .header("csrftoken", csrf_token)
+            .header("Cookie", cookie_string)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Referer", "https://www.gate.com/")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            )
+            .body(body)
+            .send()
+            .await?;
+
+        let status = response.status();
+        let response_text = response.text().await?;
+
+        debug!(
+            "Web API止盈止损响应状态: {}, 响应内容: {}",
+            status, response_text
+        );
+
+        if !status.is_success() {
+            let error_data: Result<Value, _> = serde_json::from_str(&response_text);
+            let error_message = match error_data {
+                Ok(data) => data
+                    .get("message")
+                    .or_else(|| data.get("error"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("未知错误")
+                    .to_string(),
+                Err(_) => "解析错误响应失败".to_string(),
+            };
+
+            return Err(anyhow!("Web API错误 ({}): {}", status, error_message));
+        }
+
+        let result: Value =
+            serde_json::from_str(&response_text).map_err(|e| anyhow!("解析响应失败: {}", e))?;
+
+        Ok(result)
+    }
+
+    /// 设置从浏览器获取的完整cookie字符串和CSRF token
+    pub fn set_web_credentials(&self) -> Result<String> {
+        // 从cookie中提取CSRF token
+        let cookie = self
+            .cookie
+            .as_ref()
+            .ok_or_else(|| anyhow!("Cookie未设置"))?;
+
+        for cookie_pair in cookie.split(';') {
+            let trimmed = cookie_pair.trim();
+            if trimmed.starts_with("csrftoken=") {
+                let csrftoken = trimmed[10..].to_string();
+                return Ok(csrftoken);
+            }
+        }
+        return Err(anyhow!("无法从cookie中提取CSRF Token"));
+    }
 }

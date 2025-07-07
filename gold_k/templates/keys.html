@@ -419,7 +419,13 @@
 
             try {
                 // 这里应该调用后端API测试钉钉通知
-                showMessage('钉钉通知测试功能待实现');
+                const response = await fetch('/api/dingding/test');
+                const result = await response.json();
+                if (result.success) {
+                    showMessage('钉钉通知测试成功！');
+                } else {
+                    showMessage('钉钉通知测试失败: ' + result.message, 'error');
+                }
             } catch (error) {
                 showMessage('测试失败: ' + error.message, 'error');
             }

@@ -57,11 +57,11 @@ pub struct MonitorConfig {
     pub symbol: String,
     pub interval_type: String,
     pub frequency: i64,
-    pub history_hours: i64,
+    pub history_hours: f64,
     pub shadow_ratio: f64,
     pub main_shadow_body_ratio: f64,
     pub volume_multiplier: f64,
-    pub order_size: f64,
+    pub order_size: i64, // 张
     pub risk_reward_ratio: f64,
     pub enable_auto_trading: bool,
     pub enable_dingtalk: bool,
@@ -97,6 +97,7 @@ pub struct TradingSignal {
     pub timestamp: i64,
     pub signal_type: String, // 'long' or 'short'
     pub entry_price: f64,
+    pub order_size: i64, // 张
     pub stop_loss: f64,
     pub take_profit: f64,
     pub confidence: String, // 'high', 'medium', 'low'

@@ -78,6 +78,7 @@ pub async fn start() -> anyhow::Result<()> {
             "/api/configs",
             get(get_monitor_configs).post(save_monitor_configs),
         )
+        .route("/api/dingding/test", get(dingding_test))
         .route("/keys", get(keys_page))
         .route("/monitor", get(monitor_page))
         .nest_service("/static", ServeDir::new("static"))
@@ -432,4 +433,59 @@ struct SaveApiKeysRequest {
     secret_key: String,
     webhook_url: Option<String>,
     cookie: Option<String>,
+}
+
+async fn dingding_test(State(state): State<AppState>) -> impl IntoResponse {
+    // 获取当前活跃的API配置以获取webhook_url
+    let current_key =
+        match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
+            .fetch_optional(&state.db)
+            .await
+        {
+            Ok(Some(key)) => key,
+            Ok(None) => {
+                return Json(serde_json::json!({
+                    "success": false,
+                    "message": "未找到活跃的API配置"
+                }))
+                .into_response();
+            }
+            Err(e) => {
+                warn!("Failed to get current api key: {}", e);
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+        };
+
+    // 检查是否配置了webhook_url
+    let webhook_url = match &current_key.webhook_url {
+        Some(url) if !url.is_empty() => url,
+        _ => {
+            return Json(serde_json::json!({
+                "success": false,
+                "message": "未配置钉钉机器人Webhook URL"
+            }))
+            .into_response();
+        }
+    };
+
+    // 创建钉钉服务实例并设置webhook URL
+    let mut dingtalk_service = crate::services::dingtalk::DingTalkService::new();
+    dingtalk_service.set_webhook_url(webhook_url);
+
+    // 发送测试消息
+    match dingtalk_service.test_connection().await {
+        Ok(_) => Json(serde_json::json!({
+            "success": true,
+            "message": "钉钉机器人测试成功！请检查您的钉钉群聊"
+        }))
+        .into_response(),
+        Err(e) => {
+            warn!("DingTalk test failed: {}", e);
+            Json(serde_json::json!({
+                "success": false,
+                "message": format!("钉钉机器人测试失败: {}", e)
+            }))
+            .into_response()
+        }
+    }
 }

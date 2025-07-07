@@ -219,6 +219,60 @@ impl MonitorService {
         })
     }
 
+    fn build_order_data(
+        symbol: &str,
+        order_type: &str,
+        side: &str,
+        price: f64,
+        size: i64,
+        take_profit_price: Option<f64>,
+        stop_loss_price: Option<f64>,
+    ) -> serde_json::Value {
+        use serde_json::json;
+
+        // 构建新的Web API格式的订单数据
+        let mut order_data = json!({
+            "order": {
+                "contract": symbol,
+                "size": if side == "buy" { size.abs() } else { -size.abs() },
+                "text": "web",
+                "tif": "gtc"
+            }
+        });
+
+        // 设置价格
+        if order_type == "limit" {
+            order_data["order"]["price"] = json!(price.to_string());
+        } else {
+            order_data["order"]["price"] = json!("0"); // 市价单
+            order_data["order"]["tif"] = json!("ioc");
+        }
+
+        // 添加止盈设置
+        if let Some(tp_price) = take_profit_price {
+            if tp_price > 0.0 {
+                order_data["stop_profit"] = json!({
+                    "trigger_price_type": 0, // 标记价格触发
+                    "trigger_price": tp_price.to_string(),
+                    "order_price": "0" // 市价执行
+                });
+            }
+        }
+
+        // 添加止损设置
+        if let Some(sl_price) = stop_loss_price {
+            if sl_price > 0.0 {
+                order_data["stop_loss"] = json!({
+                    "trigger_price_type": 0, // 标记价格触发
+                    "trigger_price": sl_price.to_string(),
+                    "order_price": "0" // 市价执行
+                });
+            }
+        }
+
+        order_data
+    }
+
     async fn check_symbol_signals(
         db: &SqlitePool,
         gate_service: &Arc<RwLock<GateService>>,
@@ -237,7 +291,7 @@ impl MonitorService {
             .await?;
         drop(gate);
 
-        if klines.len() < 20 {
+        if klines.len() < 5 {
             warn!("Insufficient kline data for {}", config.symbol);
             return Ok(());
         }
@@ -284,18 +338,33 @@ impl MonitorService {
             // 如果启用自动交易，生成交易信号
             if config.enable_auto_trading {
                 if let Some(trading_signal) = Self::generate_trading_signal(&signal, config) {
-                    // 保存订单记录
-                    Self::save_order(db, &trading_signal, signal_id).await?;
+                    // 下单
+                    {
+                        let order_data = Self::build_order_data(
+                            &trading_signal.symbol,
+                            "market", // 使用市价单
+                            if trading_signal.signal_type == "long" {
+                                "buy"
+                            } else {
+                                "sell"
+                            },
+                            trading_signal.entry_price,
+                            trading_signal.order_size,
+                            Some(trading_signal.take_profit),
+                            Some(trading_signal.stop_loss),
+                        );
 
-                    // 发送交易信号通知
-                    if config.enable_dingtalk {
-                        let dingtalk = dingtalk_service.read().await;
-                        if dingtalk.has_webhook() {
-                            if let Err(e) = dingtalk.send_trading_signal(&trading_signal).await {
-                                error!("Failed to send trading signal: {}", e);
-                            }
+                        let gate_service = gate_service.read().await;
+                        if let Err(e) = gate_service
+                            .place_order_with_stop_profit_loss(order_data, "USDT")
+                            .await
+                        {
+                            error!("Failed to place order: {}", e);
                         }
                     }
+
+                    // 保存订单记录
+                    Self::save_order(db, &trading_signal, signal_id).await?;
 
                     info!("Trading signal generated: {:?}", trading_signal);
                 }
@@ -312,83 +381,100 @@ impl MonitorService {
     ) -> Option<Signal> {
         // 计算影线和实体长度
         let body_length = (latest.close - latest.open).abs();
-        let upper_shadow = latest.high - latest.close.max(latest.open);
-        let lower_shadow = latest.open.min(latest.close) - latest.low;
+        let upper_shadow_length = latest.high - latest.close.max(latest.open);
+        let lower_shadow_length = latest.open.min(latest.close) - latest.low;
 
         // 检查是否有长影线
-        let has_long_upper = upper_shadow > body_length * config.main_shadow_body_ratio;
-        let has_long_lower = lower_shadow > body_length * config.main_shadow_body_ratio;
+        let has_long_upper = upper_shadow_length > body_length * config.main_shadow_body_ratio;
+        let has_long_lower = lower_shadow_length > body_length * config.main_shadow_body_ratio;
 
+        // 阴线/实体不符合
         if !has_long_upper && !has_long_lower {
+            warn!("shadow body ratio < {} ", config.main_shadow_body_ratio);
             return None;
         }
 
         // 确定主影线类型和长度
         let (shadow_type, main_shadow_length, shadow_ratio) = if has_long_upper && has_long_lower {
-            if upper_shadow >= lower_shadow {
+            if upper_shadow_length >= lower_shadow_length {
                 (
                     "upper",
-                    upper_shadow,
-                    if lower_shadow > 0.0 {
-                        upper_shadow / lower_shadow
+                    upper_shadow_length,
+                    if lower_shadow_length > 0.0 {
+                        upper_shadow_length / lower_shadow_length
                     } else {
-                        upper_shadow
+                        upper_shadow_length * 10000.0 // 当只有一边影线时，放大比例保证通过
                     },
                 )
             } else {
                 (
                     "lower",
-                    lower_shadow,
-                    if upper_shadow > 0.0 {
-                        lower_shadow / upper_shadow
+                    lower_shadow_length,
+                    if upper_shadow_length > 0.0 {
+                        lower_shadow_length / upper_shadow_length
                     } else {
-                        lower_shadow
+                        lower_shadow_length * 10000.0
                     },
                 )
             }
         } else if has_long_upper {
             (
                 "upper",
-                upper_shadow,
-                if lower_shadow > 0.0 {
-                    upper_shadow / lower_shadow
+                upper_shadow_length,
+                if lower_shadow_length > 0.0 {
+                    upper_shadow_length / lower_shadow_length
                 } else {
-                    upper_shadow
+                    upper_shadow_length * 10000.0
                 },
             )
         } else {
             (
                 "lower",
-                lower_shadow,
-                if upper_shadow > 0.0 {
-                    lower_shadow / upper_shadow
+                lower_shadow_length,
+                if upper_shadow_length > 0.0 {
+                    lower_shadow_length / upper_shadow_length
                 } else {
-                    lower_shadow
+                    lower_shadow_length * 10000.0
                 },
             )
         };
 
         // 检查影线比例是否满足条件
         if shadow_ratio < config.shadow_ratio {
+            warn!("shadow ratio :{} < {} ", shadow_ratio, config.shadow_ratio);
             return None;
         }
 
+        // 获取所需的阴线，通过config.history_hours和config.interval_type来确定需要多少历史数据
+        let required_history = (config.history_hours * 60.0
+            / Self::interval_to_minutes(&config.interval_type))
+            as usize;
+
+        if required_history > historical.len() {
+            warn!(
+                "Not enough historical data, symbol: {}, required: {}, available: {}",
+                config.symbol,
+                required_history,
+                historical.len()
+            );
+            return None;
+        }
+
+        let historical_data =
+            &historical[historical.len().saturating_sub(required_history as usize)..];
+
         // 计算平均成交量
-        let avg_volume = if historical.len() > 10 {
-            historical
-                .iter()
-                .skip(historical.len() - 10)
-                .map(|k| k.volume)
-                .sum::<f64>()
-                / 10.0
-        } else {
-            historical.iter().map(|k| k.volume).sum::<f64>() / historical.len() as f64
-        };
+        let avg_volume =
+            historical_data.iter().map(|k| k.volume).sum::<f64>() / historical_data.len() as f64;
 
         let volume_multiplier = latest.volume / avg_volume;
 
         // 检查成交量是否满足条件
         if volume_multiplier < config.volume_multiplier {
+            warn!(
+                "volume multiplier :{} < {} ",
+                volume_multiplier, config.volume_multiplier
+            );
             return None;
         }
 
@@ -428,13 +514,28 @@ impl MonitorService {
         let signal_type = match signal.shadow_type.as_str() {
             "upper" => "short",
             "lower" => "long",
-            _ => return None,
+            _ => {
+                warn!("Unknown shadow type: {}", signal.shadow_type);
+                return None;
+            }
         };
 
         // 检查配置的交易方向限制
         match config.trade_direction.as_str() {
-            "long" if signal_type == "short" => return None,
-            "short" if signal_type == "long" => return None,
+            "long" if signal_type == "short" => {
+                warn!(
+                    "Trade direction mismatch: {} vs {}",
+                    config.trade_direction, signal_type
+                );
+                return None;
+            }
+            "short" if signal_type == "long" => {
+                warn!(
+                    "Trade direction mismatch: {} vs {}",
+                    config.trade_direction, signal_type
+                );
+                return None;
+            }
             _ => {}
         }
 
@@ -472,6 +573,7 @@ impl MonitorService {
             symbol: signal.symbol.clone(),
             timestamp: signal.timestamp,
             signal_type: signal_type.to_string(),
+            order_size: config.order_size,
             entry_price,
             stop_loss,
             take_profit,
@@ -511,6 +613,24 @@ impl MonitorService {
         Ok(result.last_insert_rowid())
     }
 
+    fn interval_to_minutes(interval: &str) -> f64 {
+        match interval {
+            "1m" => 1.0,
+            "3m" => 3.0,
+            "5m" => 5.0,
+            "15m" => 15.0,
+            "30m" => 30.0,
+            "1h" => 60.0,
+            "2h" => 120.0,
+            "4h" => 240.0,
+            "6h" => 360.0,
+            "8h" => 480.0,
+            "12h" => 720.0,
+            "1d" => 1440.,
+            _ => 60.0, // default to 1 hour
+        }
+    }
+
     async fn save_order(
         db: &SqlitePool,
         trading_signal: &TradingSignal,
@@ -532,7 +652,7 @@ impl MonitorService {
         )
         .bind(&trading_signal.symbol)
         .bind(side)
-        .bind(1.0) // 默认订单大小，应该从配置中获取
+        .bind(trading_signal.order_size) // 默认订单大小，应该从配置中获取
         .bind(trading_signal.entry_price)
         .bind(trading_signal.take_profit)
         .bind(trading_signal.stop_loss)
