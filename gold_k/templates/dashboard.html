@@ -313,7 +313,7 @@
                             <th>信号类型</th>
                             <th>价格</th>
                             <th>影线比例</th>
-                            <th>状态</th>
+                            <th>K线类型</th>
                         </tr>
                     </thead>
                     <tbody id="signals-tbody">
@@ -406,10 +406,10 @@
                     <tr>
                         <td>${new Date(signal.timestamp).toLocaleString()}</td>
                         <td>${signal.symbol}</td>
-                        <td class="${signal.signal_type === 'BUY' ? 'signal-buy' : 'signal-sell'}">${signal.signal_type}</td>
-                        <td>${signal.price}</td>
+                        <td class="${signal.shadow_type === 'lower' ? 'signal-buy' : 'signal-sell'}">${signal.shadow_type}</td>
+                        <td>${signal.close_price}</td>
                         <td>${(signal.shadow_ratio * 100).toFixed(2)}%</td>
-                        <td>${signal.status}</td>
+                        <td>${signal.candle_type}</td>
                     </tr>
                 `).join('');
             } catch (error) {
