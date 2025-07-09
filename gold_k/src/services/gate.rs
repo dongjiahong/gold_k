@@ -339,6 +339,7 @@ impl GateService {
 
         debug!("使用Web API进行止盈止损下单: {}", body);
         debug!("CSRF Token: {}", csrf_token);
+        debug!("cookie: {}", cookie_string);
         debug!("Request URL: {}", web_api_url);
 
         let response = self
@@ -346,13 +347,15 @@ impl GateService {
             .post(&web_api_url)
             .header("Content-Type", "application/json")
             .header("Origin", "https://www.gate.com")
-            .header("csrftoken", csrf_token)
+            .header("Cache-control", "no-cache")
+            .header("Accept-Encoding", "gzip, deflate, br, zstd") // 这条一定要有
+            .header("Csrftoken", csrf_token)
             .header("Cookie", cookie_string)
             .header("Accept", "application/json, text/plain, */*")
-            .header("Referer", "https://www.gate.com/")
+            .header("Referer", "https://www.gate.com/zh/futures/USDT/DOGE_USDT")
             .header(
                 "User-Agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36"
             )
             .body(body)
             .send()

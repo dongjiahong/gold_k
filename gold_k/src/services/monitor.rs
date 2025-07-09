@@ -1,5 +1,5 @@
 use crate::models::*;
-use crate::services::{DingTalkService, GateService};
+use crate::services::{DingTalkService, GateService, build_order_data};
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
 use sqlx::SqlitePool;
@@ -219,60 +219,6 @@ impl MonitorService {
         })
     }
 
-    fn build_order_data(
-        symbol: &str,
-        order_type: &str,
-        side: &str,
-        price: f64,
-        size: i64,
-        take_profit_price: Option<f64>,
-        stop_loss_price: Option<f64>,
-    ) -> serde_json::Value {
-        use serde_json::json;
-
-        // 构建新的Web API格式的订单数据
-        let mut order_data = json!({
-            "order": {
-                "contract": symbol,
-                "size": if side == "buy" { size.abs() } else { -size.abs() },
-                "text": "web",
-                "tif": "gtc"
-            }
-        });
-
-        // 设置价格
-        if order_type == "limit" {
-            order_data["order"]["price"] = json!(price.to_string());
-        } else {
-            order_data["order"]["price"] = json!("0"); // 市价单
-            order_data["order"]["tif"] = json!("ioc");
-        }
-
-        // 添加止盈设置
-        if let Some(tp_price) = take_profit_price {
-            if tp_price > 0.0 {
-                order_data["stop_profit"] = json!({
-                    "trigger_price_type": 0, // 标记价格触发
-                    "trigger_price": tp_price.to_string(),
-                    "order_price": "0" // 市价执行
-                });
-            }
-        }
-
-        // 添加止损设置
-        if let Some(sl_price) = stop_loss_price {
-            if sl_price > 0.0 {
-                order_data["stop_loss"] = json!({
-                    "trigger_price_type": 0, // 标记价格触发
-                    "trigger_price": sl_price.to_string(),
-                    "order_price": "0" // 市价执行
-                });
-            }
-        }
-
-        order_data
-    }
-
     async fn check_symbol_signals(
         db: &SqlitePool,
         gate_service: &Arc<RwLock<GateService>>,
@@ -340,7 +286,7 @@ impl MonitorService {
                 if let Some(trading_signal) = Self::generate_trading_signal(&signal, config) {
                     // 下单
                     {
-                        let order_data = Self::build_order_data(
+                        let order_data = build_order_data(
                             &trading_signal.symbol,
                             "market", // 使用市价单
                             if trading_signal.signal_type == "long" {
@@ -356,10 +302,21 @@ impl MonitorService {
 
                         let gate_service = gate_service.read().await;
                         if let Err(e) = gate_service
-                            .place_order_with_stop_profit_loss(order_data, "USDT")
+                            .place_order_with_stop_profit_loss(order_data, "usdt")
                             .await
                         {
                             error!("Failed to place order: {}", e);
+                            return Ok(());
+                        }
+                    }
+
+                    // 发送钉钉通知
+                    if config.enable_dingtalk {
+                        let dingtalk = dingtalk_service.read().await;
+                        if dingtalk.has_webhook() {
+                            if let Err(e) = dingtalk.send_trading_signal(&trading_signal).await {
+                                error!("Failed to send DingTalk alert: {}", e);
+                            }
                         }
                     }
 

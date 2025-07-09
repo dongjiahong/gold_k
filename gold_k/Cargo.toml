@@ -19,7 +19,7 @@ sqlx = { version = "0.7", features = [
 ] }
 askama = "0.14"
 askama_axum = "0.4"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "gzip", "brotli", "deflate"] }
 time = "0.3"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 hmac = "0.12"
@@ -34,3 +34,4 @@ utils = { version = "0.1.0", path = "../utils" }
 validator = { version = "0.20.0", features = ["derive"] }
 toml = "0.8.23"
 serde_urlencoded = "0.7.1"
+chrono = "0.4.41"
