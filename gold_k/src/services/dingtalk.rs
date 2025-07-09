@@ -141,7 +141,7 @@ impl DingTalkService {
             / (trading_signal.entry_price - trading_signal.stop_loss).abs();
 
         let title = format!(
-            "💡 交易信号 - {} {}",
+            "💡 K线交易信号 - {} {}",
             trading_signal.symbol, direction_emoji
         );
 

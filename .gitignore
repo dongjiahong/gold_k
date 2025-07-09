@@ -28,3 +28,4 @@ app.toml
 config.toml
 .env
 data
+gold_k_ui

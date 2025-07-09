@@ -302,12 +302,13 @@ impl MonitorService {
 
                         let gate_service = gate_service.read().await;
                         if let Err(e) = gate_service
-                            .place_order_with_stop_profit_loss(order_data, "usdt")
+                            .place_order_with_stop_profit_loss(order_data.clone(), "usdt")
                             .await
                         {
                             error!("Failed to place order: {}", e);
                             return Ok(());
                         }
+                        info!("Order placed successfully: {:?}", order_data);
                     }
 
                     // 发送钉钉通知
