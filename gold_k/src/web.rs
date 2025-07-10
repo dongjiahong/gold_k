@@ -14,6 +14,7 @@ use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::{info, warn};
 
+use crate::repository::{ApiKeyRepository, MonitorConfigRepository, SignalRepository, OrderRepository};
 use crate::services::*;
 use crate::templates::*;
 use crate::{config::get_global_config, models::*};
@@ -39,11 +40,7 @@ pub async fn start() -> anyhow::Result<()> {
     let monitor_service = MonitorService::new(db.clone());
 
     // 加载当前活跃的API配置
-    if let Ok(Some(key)) =
-        sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-            .fetch_optional(&db)
-            .await
-    {
+    if let Ok(Some(key)) = ApiKeyRepository::get_active(&db).await {
         gate_service.update_credentials(&key.api_key, &key.secret_key);
         if let Some(cookie) = &key.cookie {
             gate_service.set_cookie(cookie);
@@ -111,10 +108,7 @@ async fn monitor_page() -> impl IntoResponse {
 
 // API 路由处理器
 async fn get_api_keys(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys ORDER BY created_at DESC")
-        .fetch_all(&state.db)
-        .await
-    {
+    match ApiKeyRepository::get_all(&state.db).await {
         Ok(keys) => Json(keys).into_response(),
         Err(e) => {
             warn!("Failed to get api keys: {}", e);
@@ -128,26 +122,20 @@ async fn save_api_keys(
     Json(payload): Json<SaveApiKeysRequest>,
 ) -> impl IntoResponse {
     // 先删除所有现有配置
-    if let Err(e) = sqlx::query("DELETE FROM api_keys").execute(&state.db).await {
+    if let Err(e) = ApiKeyRepository::delete_all(&state.db).await {
         warn!("Failed to clear api keys: {}", e);
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // 插入新配置
-    match sqlx::query(
-        r#"
-        INSERT INTO api_keys (name, api_key, secret_key, webhook_url, cookie, is_active)
-        VALUES (?, ?, ?, ?, ?, 1)
-        "#,
-    )
-    .bind(&payload.name)
-    .bind(&payload.api_key)
-    .bind(&payload.secret_key)
-    .bind(&payload.webhook_url)
-    .bind(&payload.cookie)
-    .execute(&state.db)
-    .await
-    {
+    match ApiKeyRepository::save(
+        &state.db,
+        &payload.name,
+        &payload.api_key,
+        &payload.secret_key,
+        payload.webhook_url.as_deref(),
+        payload.cookie.as_deref(),
+    ).await {
         Ok(_) => {
             // 更新服务配置
             let mut gate_service = state.gate_service.write().await;
@@ -170,27 +158,16 @@ async fn activate_api_key(
     axum::extract::Path(id): axum::extract::Path<i64>,
 ) -> impl IntoResponse {
     // 先将所有密钥设置为非活跃状态
-    if let Err(e) = sqlx::query("UPDATE api_keys SET is_active = 0")
-        .execute(&state.db)
-        .await
-    {
+    if let Err(e) = ApiKeyRepository::deactivate_all(&state.db).await {
         warn!("Failed to deactivate api keys: {}", e);
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
     }
 
     // 激活指定密钥
-    match sqlx::query("UPDATE api_keys SET is_active = 1 WHERE id = ?")
-        .bind(id)
-        .execute(&state.db)
-        .await
-    {
+    match ApiKeyRepository::activate(&state.db, id).await {
         Ok(_) => {
             // 获取激活的密钥并更新服务配置
-            if let Ok(key) = sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE id = ?")
-                .bind(id)
-                .fetch_one(&state.db)
-                .await
-            {
+            if let Ok(Some(key)) = ApiKeyRepository::get_by_id(&state.db, id).await {
                 let mut gate_service = state.gate_service.write().await;
                 gate_service.update_credentials(&key.api_key, &key.secret_key);
                 if let Some(cookie) = &key.cookie {
@@ -214,11 +191,7 @@ async fn delete_api_key(
     State(state): State<AppState>,
     axum::extract::Path(id): axum::extract::Path<i64>,
 ) -> impl IntoResponse {
-    match sqlx::query("DELETE FROM api_keys WHERE id = ?")
-        .bind(id)
-        .execute(&state.db)
-        .await
-    {
+    match ApiKeyRepository::delete_by_id(&state.db, id).await {
         Ok(_) => Json(serde_json::json!({"success": true})).into_response(),
         Err(e) => {
             warn!("Failed to delete api key: {}", e);
@@ -254,10 +227,7 @@ async fn get_monitor_status(State(state): State<AppState>) -> impl IntoResponse 
 }
 
 async fn get_signals(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Signal>("SELECT * FROM signals ORDER BY timestamp DESC LIMIT 100")
-        .fetch_all(&state.db)
-        .await
-    {
+    match SignalRepository::get_recent(&state.db, 100).await {
         Ok(signals) => Json(signals).into_response(),
         Err(e) => {
             warn!("Failed to get signals: {}", e);
@@ -267,10 +237,7 @@ async fn get_signals(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn get_orders(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, Order>("SELECT * FROM orders ORDER BY timestamp DESC LIMIT 100")
-        .fetch_all(&state.db)
-        .await
-    {
+    match OrderRepository::get_recent(&state.db, 100).await {
         Ok(orders) => Json(orders).into_response(),
         Err(e) => {
             warn!("Failed to get orders: {}", e);
@@ -280,12 +247,7 @@ async fn get_orders(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn get_monitor_configs(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, MonitorConfig>(
-        "SELECT * FROM monitor_configs ORDER BY created_at DESC",
-    )
-    .fetch_all(&state.db)
-    .await
-    {
+    match MonitorConfigRepository::get_all(&state.db).await {
         Ok(configs) => Json(configs).into_response(),
         Err(e) => {
             warn!("Failed to get monitor configs: {}", e);
@@ -298,71 +260,17 @@ async fn save_monitor_configs(
     State(state): State<AppState>,
     Json(configs): Json<Vec<MonitorConfig>>,
 ) -> impl IntoResponse {
-    // 开始事务
-    let mut tx = match state.db.begin().await {
-        Ok(tx) => tx,
+    match MonitorConfigRepository::save_batch(&state.db, &configs).await {
+        Ok(_) => Json(serde_json::json!({"success": true})).into_response(),
         Err(e) => {
-            warn!("Failed to start transaction: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-        }
-    };
-
-    // 清空现有配置
-    if let Err(e) = sqlx::query("DELETE FROM monitor_configs")
-        .execute(&mut *tx)
-        .await
-    {
-        warn!("Failed to clear monitor configs: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    // 插入新配置
-    for config in configs {
-        if let Err(e) = sqlx::query(
-            r#"
-            INSERT INTO monitor_configs (
-                symbol, interval_type, frequency, history_hours, shadow_ratio,
-                main_shadow_body_ratio, volume_multiplier, order_size,
-                risk_reward_ratio, enable_auto_trading, enable_dingtalk,
-                trade_direction, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&config.symbol)
-        .bind(&config.interval_type)
-        .bind(config.frequency)
-        .bind(config.history_hours)
-        .bind(config.shadow_ratio)
-        .bind(config.main_shadow_body_ratio)
-        .bind(config.volume_multiplier)
-        .bind(config.order_size)
-        .bind(config.risk_reward_ratio)
-        .bind(config.enable_auto_trading)
-        .bind(config.enable_dingtalk)
-        .bind(&config.trade_direction)
-        .bind(config.is_active)
-        .execute(&mut *tx)
-        .await
-        {
-            warn!("Failed to insert monitor config: {}", e);
-            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            warn!("Failed to save monitor configs: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
-
-    // 提交事务
-    if let Err(e) = tx.commit().await {
-        warn!("Failed to commit transaction: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-    }
-
-    Json(serde_json::json!({"success": true})).into_response()
 }
 
 async fn get_current_api_key(State(state): State<AppState>) -> impl IntoResponse {
-    match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-        .fetch_optional(&state.db)
-        .await
-    {
+    match ApiKeyRepository::get_active(&state.db).await {
         Ok(Some(key)) => Json(key).into_response(),
         Ok(None) => Json(serde_json::Value::Null).into_response(),
         Err(e) => {
@@ -374,23 +282,19 @@ async fn get_current_api_key(State(state): State<AppState>) -> impl IntoResponse
 
 async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
     // 获取当前活跃的API配置
-    let current_key =
-        match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-            .fetch_optional(&state.db)
-            .await
-        {
-            Ok(Some(key)) => key,
-            Ok(None) => {
-                return Json(
-                    serde_json::json!({"success": false, "message": "未找到活跃的API配置"}),
-                )
-                .into_response();
-            }
-            Err(e) => {
-                warn!("Failed to get current api key: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let current_key = match ApiKeyRepository::get_active(&state.db).await {
+        Ok(Some(key)) => key,
+        Ok(None) => {
+            return Json(
+                serde_json::json!({"success": false, "message": "未找到活跃的API配置"}),
+            )
+            .into_response();
+        }
+        Err(e) => {
+            warn!("Failed to get current api key: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
 
     // 使用Gate服务获取合约数据
     let gate_service = state.gate_service.read().await;
@@ -399,12 +303,7 @@ async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
             let contracts_json = serde_json::to_string(&contracts).unwrap_or_default();
 
             // 更新数据库中的合约数据
-            if let Err(e) = sqlx::query("UPDATE api_keys SET contracts = ? WHERE id = ?")
-                .bind(&contracts_json)
-                .bind(current_key.id)
-                .execute(&state.db)
-                .await
-            {
+            if let Err(e) = ApiKeyRepository::update_contracts(&state.db, current_key.id, &contracts_json).await {
                 warn!("Failed to update contracts: {}", e);
             }
 
@@ -438,24 +337,20 @@ struct SaveApiKeysRequest {
 
 async fn dingding_test(State(state): State<AppState>) -> impl IntoResponse {
     // 获取当前活跃的API配置以获取webhook_url
-    let current_key =
-        match sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-            .fetch_optional(&state.db)
-            .await
-        {
-            Ok(Some(key)) => key,
-            Ok(None) => {
-                return Json(serde_json::json!({
-                    "success": false,
-                    "message": "未找到活跃的API配置"
-                }))
-                .into_response();
-            }
-            Err(e) => {
-                warn!("Failed to get current api key: {}", e);
-                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-            }
-        };
+    let current_key = match ApiKeyRepository::get_active(&state.db).await {
+        Ok(Some(key)) => key,
+        Ok(None) => {
+            return Json(serde_json::json!({
+                "success": false,
+                "message": "未找到活跃的API配置"
+            }))
+            .into_response();
+        }
+        Err(e) => {
+            warn!("Failed to get current api key: {}", e);
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
 
     // 检查是否配置了webhook_url
     let webhook_url = match &current_key.webhook_url {

@@ -1,4 +1,5 @@
 use crate::models::*;
+use crate::repository::{ApiKeyRepository, MonitorConfigRepository, SignalRepository, OrderRepository};
 use crate::services::{DingTalkService, GateService, build_order_data};
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
@@ -96,15 +97,8 @@ impl MonitorService {
         let tasks = self.active_tasks.read().await;
         let active_symbols: Vec<String> = tasks.keys().cloned().collect();
 
-        let total_signals = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM signals")
-            .fetch_one(&self.db)
-            .await
-            .unwrap_or(0);
-
-        let total_orders = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM orders")
-            .fetch_one(&self.db)
-            .await
-            .unwrap_or(0);
+        let total_signals = SignalRepository::count(&self.db).await.unwrap_or(0);
+        let total_orders = OrderRepository::count(&self.db).await.unwrap_or(0);
 
         let last_check = if is_running {
             Some(
@@ -117,23 +111,21 @@ impl MonitorService {
             None
         };
 
-        let api_key =
-            sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-                .fetch_one(&self.db)
-                .await
-                .unwrap_or_default();
+        let api_key = ApiKeyRepository::get_active(&self.db).await.unwrap_or(None);
 
         // json反序列化api_key.contracts
         let mut total_contracts = 0;
-        if let Some(contracts_str) = &api_key.contracts {
-            let contracts: Vec<Contract> = serde_json::from_str(contracts_str).unwrap_or_default();
-            total_contracts = contracts.len() as i64;
-            debug!(
-                "total contracts: {:?}, contracts: {:?}",
-                total_contracts, contracts_str
-            );
-        } else {
-            warn!("No contracts found for API Key: {:?}", api_key);
+        if let Some(api_key) = api_key {
+            if let Some(contracts_str) = &api_key.contracts {
+                let contracts: Vec<Contract> = serde_json::from_str(contracts_str).unwrap_or_default();
+                total_contracts = contracts.len() as i64;
+                debug!(
+                    "total contracts: {:?}, contracts: {:?}",
+                    total_contracts, contracts_str
+                );
+            } else {
+                warn!("No contracts found for API Key: {:?}", api_key);
+            }
         }
 
         MonitorStatus {
@@ -147,20 +139,13 @@ impl MonitorService {
     }
 
     async fn get_active_configs(&self) -> Result<Vec<MonitorConfig>> {
-        let configs =
-            sqlx::query_as::<_, MonitorConfig>("SELECT * FROM monitor_configs WHERE is_active = 1")
-                .fetch_all(&self.db)
-                .await?;
-
+        let configs = MonitorConfigRepository::get_active(&self.db).await?;
         Ok(configs)
     }
 
     async fn update_services(&self) -> Result<()> {
         // 获取活跃的API密钥
-        let api_key =
-            sqlx::query_as::<_, ApiKey>("SELECT * FROM api_keys WHERE is_active = 1 LIMIT 1")
-                .fetch_optional(&self.db)
-                .await?;
+        let api_key = ApiKeyRepository::get_active(&self.db).await?;
 
         if let Some(key) = api_key {
             // 更新Gate服务配置
@@ -264,16 +249,7 @@ impl MonitorService {
         // 检查是否满足信号条件
         if let Some(signal) = Self::analyze_kline_signal(latest_kline, historical_klines, config) {
             // 检查是否已经记录过这个信号（防重复）
-            let existing_signal = sqlx::query_scalar::<_, i64>(
-                "SELECT COUNT(*) FROM signals WHERE symbol = ? AND timestamp = ? AND interval_type = ?"
-            )
-            .bind(&config.symbol)
-            .bind(signal.timestamp)
-            .bind(&config.interval_type)
-            .fetch_one(db)
-            .await?;
-
-            if existing_signal > 0 {
+            if SignalRepository::exists(&db, &config.symbol, signal.timestamp, &config.interval_type).await? {
                 warn!(
                     "Signal already recorded for {} at {}",
                     config.symbol, signal.timestamp
@@ -282,7 +258,7 @@ impl MonitorService {
             }
 
             // 保存信号到数据库
-            let signal_id = Self::save_signal(db, &signal).await?;
+            let signal_id = SignalRepository::save(db, &signal).await?;
 
             info!("New signal detected for {}: {:?}", config.symbol, signal);
 
@@ -337,7 +313,7 @@ impl MonitorService {
                     }
 
                     // 保存订单记录
-                    Self::save_order(db, &trading_signal, signal_id).await?;
+                    OrderRepository::save_from_trading_signal(db, &trading_signal, signal_id).await?;
 
                     info!("Trading signal generated: {:?}", trading_signal);
                 }
@@ -555,73 +531,5 @@ impl MonitorService {
             confidence: confidence.to_string(),
             reason,
         })
-    }
-
-    async fn save_signal(db: &SqlitePool, signal: &Signal) -> Result<i64> {
-        let result = sqlx::query(
-            r#"
-            INSERT INTO signals (
-                symbol, timestamp, open_price, high_price, low_price, close_price, 
-                volume, interval_type, candle_type, shadow_type, body_length, 
-                main_shadow_length, shadow_ratio, volume_multiplier, avg_volume
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&signal.symbol)
-        .bind(signal.timestamp)
-        .bind(signal.open_price)
-        .bind(signal.high_price)
-        .bind(signal.low_price)
-        .bind(signal.close_price)
-        .bind(signal.volume)
-        .bind(&signal.interval_type)
-        .bind(&signal.candle_type)
-        .bind(&signal.shadow_type)
-        .bind(signal.body_length)
-        .bind(signal.main_shadow_length)
-        .bind(signal.shadow_ratio)
-        .bind(signal.volume_multiplier)
-        .bind(signal.avg_volume)
-        .execute(db)
-        .await?;
-
-        Ok(result.last_insert_rowid())
-    }
-
-    async fn save_order(
-        db: &SqlitePool,
-        trading_signal: &TradingSignal,
-        signal_id: i64,
-    ) -> Result<()> {
-        let side = if trading_signal.signal_type == "long" {
-            "buy"
-        } else {
-            "sell"
-        };
-
-        sqlx::query(
-            r#"
-            INSERT INTO orders (
-                symbol, side, order_size, entry_price, take_profit_price, 
-                stop_loss_price, risk_reward_ratio, signal_id, timestamp
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&trading_signal.symbol)
-        .bind(side)
-        .bind(trading_signal.order_size) // 默认订单大小，应该从配置中获取
-        .bind(trading_signal.entry_price)
-        .bind(trading_signal.take_profit)
-        .bind(trading_signal.stop_loss)
-        .bind(
-            (trading_signal.take_profit - trading_signal.entry_price).abs()
-                / (trading_signal.entry_price - trading_signal.stop_loss).abs(),
-        )
-        .bind(signal_id)
-        .bind(trading_signal.timestamp)
-        .execute(db)
-        .await?;
-
-        Ok(())
     }
 }
