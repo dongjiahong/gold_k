@@ -462,6 +462,8 @@
 
                 if (response.ok) {
                     const result = await response.json();
+                    // 存放在local storage
+                    localStorage.setItem('gate_contracts', JSON.stringify(result.data));
                     console.log(`合约数据拉取成功！共获取${result.count}个合约`);
                 } else {
                     const error = await response.text();

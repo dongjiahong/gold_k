@@ -374,6 +374,35 @@
     <script>
         let configs = [];
 
+        // 从localStorage获取合约信息
+        function getContractInfo() {
+            try {
+                const contractsData = localStorage.getItem('gate_contracts');
+                return contractsData ? JSON.parse(contractsData) : [];
+            } catch (error) {
+                console.warn('获取合约信息失败:', error);
+                return [];
+            }
+        }
+
+        // 验证交易对是否存在
+        function validateSymbol(symbol) {
+            const contracts = getContractInfo();
+            return contracts.find(contract => contract.name === symbol);
+        }
+
+        // 获取合约乘数用于计算订单价值
+        function getQuantoMultiplier(symbol) {
+            const contract = validateSymbol(symbol);
+            return contract ? parseFloat(contract.quanto_multiplier) : 1;
+        }
+
+        // 计算订单价值（张数 * 乘数）
+        function calculateOrderValue(symbol, orderSize) {
+            const multiplier = getQuantoMultiplier(symbol);
+            return (orderSize * multiplier).toFixed(4);
+        }
+
         // 显示消息
         function showMessage(message, type = 'success') {
             const container = document.getElementById('message-container');
@@ -407,19 +436,26 @@
         // 渲染配置列表
         function renderConfigs() {
             const container = document.getElementById('config-list');
-            container.innerHTML = configs.map((config, index) => `
+            
+            container.innerHTML = configs.map((config, index) => {
+                const contract = validateSymbol(config.symbol);
+                const isValidSymbol = !!contract;
+                const orderValue = calculateOrderValue(config.symbol, config.order_size);
+                
+                return `
                 <div class="config-item">
                     <div class="config-header" onclick="toggleConfig(${index})">
                         <div class="config-title">
                             ${config.symbol} - ${config.interval_type}
+                            ${!isValidSymbol ? '<span style="color: #f44336; font-size: 0.8em;">⚠️ 无效交易对</span>' : ''}
                             <span class="config-toggle" id="toggle-${index}">▼</span>
                         </div>
                         <button class="config-remove" onclick="event.stopPropagation(); removeConfig(${index})">删除</button>
                     </div>
                     <div class="config-form" id="config-form-${index}">
                         <div class="form-group">
-                            <label>交易对</label>
-                            <input type="text" value="${config.symbol}" onchange="updateConfig(${index}, 'symbol', this.value)">
+                            <label>交易对 ${!isValidSymbol ? '<span style="color: #f44336;">*无效</span>' : ''}</label>
+                            <input type="text" value="${config.symbol}" onchange="updateSymbol(${index}, this.value)" placeholder="如: BTC_USDT">
                         </div>
                         <div class="form-group">
                             <label>时间周期</label>
@@ -454,8 +490,8 @@
                             <input type="number" step="0.1" min="0.1" value="${config.volume_multiplier}" onchange="updateConfig(${index}, 'volume_multiplier', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
-                            <label>订单大小</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.order_size}" onchange="updateConfig(${index}, 'order_size', parseFloat(this.value))">
+                            <label>订单大小(张) ${isValidSymbol ? `<span style="color: #4CAF50; font-size: 0.8em;">≈ ${orderValue} ${config.symbol.split('_')[0]}</span>` : ''}</label>
+                            <input type="number" step="0.1" min="0.1" value="${config.order_size}" onchange="updateOrderSize(${index}, parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>风险收益比</label>
@@ -481,7 +517,24 @@
                         </div>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
+        }
+
+        // 更新交易对
+        function updateSymbol(index, value) {
+            updateConfig(index, 'symbol', value);
+            // 验证交易对并显示提示
+            const contract = validateSymbol(value);
+            if (!contract && value) {
+                showMessage(`警告: 交易对 ${value} 不存在于合约列表中`, 'error');
+            }
+            renderConfigs(); // 重新渲染以更新订单价值显示
+        }
+
+        // 更新订单大小
+        function updateOrderSize(index, value) {
+            updateConfig(index, 'order_size', value);
+            renderConfigs(); // 重新渲染以更新订单价值显示
         }
 
         // 切换配置项折叠状态
@@ -509,8 +562,16 @@
             renderConfigs();
         }
 
-        // 保存配置
+        // 保存配置前验证
         async function saveConfigs() {
+            // 验证所有交易对
+            const invalidSymbols = configs.filter(config => !validateSymbol(config.symbol));
+            if (invalidSymbols.length > 0) {
+                const symbols = invalidSymbols.map(config => config.symbol).join(', ');
+                showMessage(`错误: 以下交易对无效: ${symbols}`, 'error');
+                return;
+            }
+
             try {
                 const response = await fetch('/api/configs', {
                     method: 'POST',

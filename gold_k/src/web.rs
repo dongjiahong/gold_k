@@ -411,6 +411,7 @@ async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
             Json(serde_json::json!({
                 "success": true,
                 "count": contracts.len(),
+                "data": contracts,
                 "message": format!("成功获取{}个合约", contracts.len())
             }))
             .into_response()
