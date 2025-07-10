@@ -254,15 +254,6 @@ impl MonitorService {
         // 计算这个K线应该结束的时间
         let kline_end_time = last_kline.timestamp + interval_seconds;
 
-        // 如果当前时间还没有到达K线结束时间，说明K线还在形成中
-        if now < kline_end_time {
-            debug!(
-                "Latest kline for {} is still forming, end time: {}, current time: {}",
-                config.symbol, kline_end_time, now
-            );
-            return Ok(());
-        }
-
         // 使用已收盘的K线数据
         let (latest_kline, historical_klines) = if now < kline_end_time {
             (&klines[klines.len() - 2], &klines[..klines.len() - 2])
@@ -283,7 +274,7 @@ impl MonitorService {
             .await?;
 
             if existing_signal > 0 {
-                debug!(
+                warn!(
                     "Signal already recorded for {} at {}",
                     config.symbol, signal.timestamp
                 );
