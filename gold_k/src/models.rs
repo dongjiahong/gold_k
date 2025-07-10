@@ -15,6 +15,13 @@ pub struct ApiKey {
     pub updated_at: i64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct Contract {
+    pub order_price_round: String, // 合约价格精度
+    pub quanto_multiplier: String, // 合约数量乘数
+    pub name: String,              // 合约名称, BTC_USDT
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Signal {
     pub id: i64,

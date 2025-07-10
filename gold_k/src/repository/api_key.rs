@@ -1,4 +1,4 @@
-use crate::models::ApiKey;
+use crate::models::{ApiKey, Contract};
 use anyhow::Result;
 use sqlx::SqlitePool;
 
@@ -28,6 +28,27 @@ impl ApiKeyRepository {
             .fetch_optional(pool)
             .await?;
         Ok(key)
+    }
+
+    /// 根据指定币获取配置
+    pub async fn get_contract_by_symbol(
+        pool: &SqlitePool,
+        symbol: &str,
+    ) -> Result<Option<Contract>> {
+        // 1. 获取contracts
+        let key = ApiKeyRepository::get_active(pool).await?;
+
+        if key.is_none() {
+            return Ok(None);
+        }
+        let contracts_str = key.unwrap().contracts;
+        if contracts_str.is_none() {
+            return Ok(None);
+        }
+
+        // 2. 反序列化
+        let contracts: Vec<Contract> = serde_json::from_str(contracts_str.unwrap().as_str())?;
+        Ok(contracts.into_iter().find(|c| c.name == symbol))
     }
 
     /// 删除所有API密钥

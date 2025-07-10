@@ -1,8 +1,9 @@
 use crate::models::*;
-use crate::repository::{ApiKeyRepository, MonitorConfigRepository, SignalRepository, OrderRepository};
+use crate::repository::{
+    ApiKeyRepository, MonitorConfigRepository, OrderRepository, SignalRepository,
+};
 use crate::services::{DingTalkService, GateService, build_order_data};
 use anyhow::{Result, anyhow};
-use serde::Deserialize;
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,6 +12,17 @@ use tokio::sync::RwLock;
 use tokio::time::{Duration, interval};
 use tracing::{debug, error, info, warn};
 
+// precision: "0.01" -> 2
+fn round_price(price: f64, precision: &str) -> f64 {
+    let decimal_places = precision.split('.').nth(1).map(|s| s.len()).unwrap_or(0);
+    println!(
+        "Rounding price: {} with precision: {}, decimal places: {}",
+        price, precision, decimal_places
+    );
+    let multiplier = 10_f64.powi(decimal_places as i32);
+    (price * multiplier).round() / multiplier
+}
+
 #[derive(Debug, Clone)]
 pub struct MonitorService {
     db: SqlitePool,
@@ -18,13 +30,6 @@ pub struct MonitorService {
     active_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     gate_service: Arc<RwLock<GateService>>,
     dingtalk_service: Arc<RwLock<DingTalkService>>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct Contract {
-    pub order_price_round: String, // 合约价格精度
-    pub quanto_multiplier: String, // 合约数量乘数
-    pub name: String,              // 合约名称, BTC_USDT
 }
 
 impl MonitorService {
@@ -111,22 +116,28 @@ impl MonitorService {
             None
         };
 
-        let api_key = ApiKeyRepository::get_active(&self.db).await.unwrap_or(None);
+        let api_key_result = ApiKeyRepository::get_active(&self.db).await.unwrap_or(None);
 
-        // json反序列化api_key.contracts
         let mut total_contracts = 0;
-        if let Some(api_key) = api_key {
-            if let Some(contracts_str) = &api_key.contracts {
-                let contracts: Vec<Contract> = serde_json::from_str(contracts_str).unwrap_or_default();
-                total_contracts = contracts.len() as i64;
-                debug!(
-                    "total contracts: {:?}, contracts: {:?}",
-                    total_contracts, contracts_str
-                );
-            } else {
-                warn!("No contracts found for API Key: {:?}", api_key);
+        match api_key_result {
+            Some(api_key) => {
+                // json反序列化api_key.contracts
+                if let Some(contracts_str) = &api_key.contracts {
+                    let contracts: Vec<Contract> =
+                        serde_json::from_str(contracts_str).unwrap_or_default();
+                    total_contracts = contracts.len() as i64;
+                    debug!(
+                        "total contracts: {:?}, contracts: {:?}",
+                        total_contracts, contracts_str
+                    );
+                } else {
+                    warn!("No contracts found for API Key: {:?}", api_key);
+                }
             }
-        }
+            None => {
+                warn!("Failed to get active API key");
+            }
+        };
 
         MonitorStatus {
             is_running,
@@ -140,6 +151,7 @@ impl MonitorService {
 
     async fn get_active_configs(&self) -> Result<Vec<MonitorConfig>> {
         let configs = MonitorConfigRepository::get_active(&self.db).await?;
+
         Ok(configs)
     }
 
@@ -249,7 +261,14 @@ impl MonitorService {
         // 检查是否满足信号条件
         if let Some(signal) = Self::analyze_kline_signal(latest_kline, historical_klines, config) {
             // 检查是否已经记录过这个信号（防重复）
-            if SignalRepository::exists(&db, &config.symbol, signal.timestamp, &config.interval_type).await? {
+            if SignalRepository::exists(
+                &db,
+                &config.symbol,
+                signal.timestamp,
+                &config.interval_type,
+            )
+            .await?
+            {
                 warn!(
                     "Signal already recorded for {} at {}",
                     config.symbol, signal.timestamp
@@ -272,9 +291,19 @@ impl MonitorService {
                 }
             }
 
+            let contract = ApiKeyRepository::get_contract_by_symbol(db, &signal.symbol).await?;
+            if contract.is_none() {
+                warn!("No contract found for symbol: {}", signal.symbol);
+                return Ok(());
+            }
+
             // 如果启用自动交易，生成交易信号
             if config.enable_auto_trading {
-                if let Some(trading_signal) = Self::generate_trading_signal(&signal, config) {
+                if let Some(trading_signal) = Self::generate_trading_signal(
+                    &signal,
+                    config,
+                    contract.unwrap().order_price_round,
+                ) {
                     // 下单
                     {
                         let order_data = build_order_data(
@@ -313,7 +342,8 @@ impl MonitorService {
                     }
 
                     // 保存订单记录
-                    OrderRepository::save_from_trading_signal(db, &trading_signal, signal_id).await?;
+                    OrderRepository::save_from_trading_signal(db, &trading_signal, signal_id)
+                        .await?;
 
                     info!("Trading signal generated: {:?}", trading_signal);
                 }
@@ -460,7 +490,11 @@ impl MonitorService {
         })
     }
 
-    fn generate_trading_signal(signal: &Signal, config: &MonitorConfig) -> Option<TradingSignal> {
+    fn generate_trading_signal(
+        signal: &Signal,
+        config: &MonitorConfig,
+        order_price_round: String, // 订单价格精度
+    ) -> Option<TradingSignal> {
         // 根据影线类型确定交易方向
         let signal_type = match signal.shadow_type.as_str() {
             "upper" => "short",
@@ -504,6 +538,10 @@ impl MonitorService {
             (stop_loss, take_profit)
         };
 
+        // 根据精度调整价格, 四舍五入
+        let stop_loss = round_price(stop_loss, &order_price_round);
+        let take_profit = round_price(take_profit, &order_price_round);
+
         // 计算信心等级
         let confidence = if signal.shadow_ratio >= 3.0 && signal.volume_multiplier >= 2.0 {
             "high"
@@ -531,5 +569,20 @@ impl MonitorService {
             confidence: confidence.to_string(),
             reason,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_round_price() {
+        assert_eq!(round_price(1.2345, "0.01"), 1.23);
+        assert_eq!(round_price(1.2345, "0.001"), 1.235);
+        assert_eq!(round_price(1.2345, "0.1"), 1.2);
+        assert_eq!(round_price(1.2345, "1"), 1.0);
+        assert_eq!(round_price(1.7345, "1"), 2.0);
+        assert_eq!(round_price(1.5345, "1a"), 2.0);
     }
 }
