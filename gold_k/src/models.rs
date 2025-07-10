@@ -47,8 +47,8 @@ pub struct Signal {
 pub struct Order {
     pub id: i64,
     pub symbol: String,
-    pub side: String, // 'buy' or 'sell'
-    pub order_size: f64,
+    pub side: String,    // 'buy' or 'sell'
+    pub order_size: i64, // 合约数量张
     pub entry_price: f64,
     pub take_profit_price: f64,
     pub stop_loss_price: f64,

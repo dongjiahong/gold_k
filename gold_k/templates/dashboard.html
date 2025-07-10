@@ -333,7 +333,8 @@
                             <th>类型</th>
                             <th>数量</th>
                             <th>价格</th>
-                            <th>状态</th>
+                            <th>止盈</th>
+                            <th>止损</th>
                         </tr>
                     </thead>
                     <tbody id="orders-tbody">
@@ -404,7 +405,7 @@
 
                 tbody.innerHTML = signals.map(signal => `
                     <tr>
-                        <td>${new Date(signal.timestamp).toLocaleString()}</td>
+                        <td>${new Date(signal.timestamp * 1000).toLocaleString()}</td>
                         <td>${signal.symbol}</td>
                         <td class="${signal.shadow_type === 'lower' ? 'signal-buy' : 'signal-sell'}">${signal.shadow_type}</td>
                         <td>${signal.close_price}</td>
@@ -431,12 +432,13 @@
 
                 tbody.innerHTML = orders.map(order => `
                     <tr>
-                        <td>${new Date(order.timestamp).toLocaleString()}</td>
+                        <td>${new Date(order.timestamp * 1000).toLocaleString()}</td>
                         <td>${order.symbol}</td>
                         <td class="${order.side === 'buy' ? 'signal-buy' : 'signal-sell'}">${order.side.toUpperCase()}</td>
-                        <td>${order.amount}</td>
-                        <td>${order.price}</td>
-                        <td>${order.status}</td>
+                        <td>${order.order_size}</td>
+                        <td>${order.entry_price}</td>
+                        <td>${order.take_profit_price}</td>
+                        <td>${order.stop_loss_price}</td>
                     </tr>
                 `).join('');
             } catch (error) {
