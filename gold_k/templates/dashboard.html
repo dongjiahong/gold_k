@@ -409,7 +409,7 @@
                         <td>${signal.symbol}</td>
                         <td class="${signal.shadow_type === 'lower' ? 'signal-buy' : 'signal-sell'}">${signal.shadow_type}</td>
                         <td>${signal.close_price}</td>
-                        <td>${(signal.shadow_ratio * 100).toFixed(2)}%</td>
+                        <td>${(signal.shadow_ratio)}</td>
                         <td>${signal.candle_type}</td>
                     </tr>
                 `).join('');
