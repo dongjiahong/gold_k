@@ -5,9 +5,13 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.98"
+chrono = "0.4.41"
 time = { version = "0.3.41", features = ["macros"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.19", features = ["env-filter", "local-time"] }
+tracing-subscriber = { version = "0.3.19", features = [
+    "env-filter",
+    "local-time",
+] }
 
 [build-dependencies]
 anyhow = "1.0.98"

@@ -55,14 +55,14 @@ pub struct Order {
 pub struct MonitorConfig {
     pub id: Option<i64>,
     pub symbol: String,
-    pub interval_type: String,
-    pub frequency: i64,
-    pub history_hours: f64,
-    pub shadow_ratio: f64,
-    pub main_shadow_body_ratio: f64,
-    pub volume_multiplier: f64,
-    pub order_size: i64, // 张
-    pub risk_reward_ratio: f64,
+    pub interval_type: String, // k线类型，1m、5m、15m、30m、1h、4h、1d
+    pub frequency: i64,        // 监控间隔时间
+    pub history_hours: f64,    // 历史成交量数据回溯时
+    pub shadow_ratio: f64,     // 影线占比
+    pub main_shadow_body_ratio: f64, // 主影线与实体占比
+    pub volume_multiplier: f64, // 成交量倍数
+    pub order_size: i64,       // 张
+    pub risk_reward_ratio: f64, // 风险收益比
     pub enable_auto_trading: bool,
     pub enable_dingtalk: bool,
     pub trade_direction: String, // 'both', 'long', 'short'
@@ -120,4 +120,24 @@ pub struct DingTalkText {
 pub struct DingTalkMarkdown {
     pub title: String,
     pub text: String,
+}
+
+impl MonitorConfig {
+    pub fn interval_type_to_minutes(&self) -> f64 {
+        match self.interval_type.as_str() {
+            "1m" => 1.0,
+            "3m" => 3.0,
+            "5m" => 5.0,
+            "15m" => 15.0,
+            "30m" => 30.0,
+            "1h" => 60.0,
+            "4h" => 240.0,
+            "1d" => 1440.0,
+            _ => 0.0,
+        }
+    }
+
+    pub fn interval_type_to_seconds(&self) -> i64 {
+        (self.interval_type_to_minutes() * 60.0) as i64
+    }
 }

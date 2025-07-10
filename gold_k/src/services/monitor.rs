@@ -243,8 +243,32 @@ impl MonitorService {
         }
 
         // 分析最新的K线
-        let latest_kline = &klines[klines.len() - 1];
-        let historical_klines = &klines[..klines.len() - 1];
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let interval_seconds = config.interval_type_to_seconds();
+        let last_kline = &klines[klines.len() - 1];
+
+        // 计算这个K线应该结束的时间
+        let kline_end_time = last_kline.timestamp + interval_seconds;
+
+        // 如果当前时间还没有到达K线结束时间，说明K线还在形成中
+        if now < kline_end_time {
+            debug!(
+                "Latest kline for {} is still forming, end time: {}, current time: {}",
+                config.symbol, kline_end_time, now
+            );
+            return Ok(());
+        }
+
+        // 使用已收盘的K线数据
+        let (latest_kline, historical_klines) = if now < kline_end_time {
+            (&klines[klines.len() - 2], &klines[..klines.len() - 2])
+        } else {
+            (&klines[klines.len() - 1], &klines[..klines.len() - 1])
+        };
 
         // 检查是否满足信号条件
         if let Some(signal) = Self::analyze_kline_signal(latest_kline, historical_klines, config) {
@@ -407,9 +431,8 @@ impl MonitorService {
         }
 
         // 获取所需的阴线，通过config.history_hours和config.interval_type来确定需要多少历史数据
-        let required_history = (config.history_hours * 60.0
-            / Self::interval_to_minutes(&config.interval_type))
-            as usize;
+        let required_history =
+            (config.history_hours * 60.0 / config.interval_type_to_minutes()) as usize;
 
         if required_history > historical.len() {
             warn!(
@@ -572,24 +595,6 @@ impl MonitorService {
         .await?;
 
         Ok(result.last_insert_rowid())
-    }
-
-    fn interval_to_minutes(interval: &str) -> f64 {
-        match interval {
-            "1m" => 1.0,
-            "3m" => 3.0,
-            "5m" => 5.0,
-            "15m" => 15.0,
-            "30m" => 30.0,
-            "1h" => 60.0,
-            "2h" => 120.0,
-            "4h" => 240.0,
-            "6h" => 360.0,
-            "8h" => 480.0,
-            "12h" => 720.0,
-            "1d" => 1440.,
-            _ => 60.0, // default to 1 hour
-        }
     }
 
     async fn save_order(

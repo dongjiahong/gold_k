@@ -4,12 +4,6 @@ use reqwest::Client;
 use serde_json::Value;
 use tracing::debug;
 
-fn format_timestamp(timestamp: i64) -> String {
-    // format 1751933700 -> 2002-01-01 00:00:00
-    let datetime = chrono::DateTime::from_timestamp(timestamp, 0).unwrap();
-    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-}
-
 #[derive(Debug, Clone)]
 pub struct DingTalkService {
     client: Client,
@@ -77,7 +71,7 @@ impl DingTalkService {
             1.0
         };
 
-        let timestamp = format_timestamp(signal.timestamp);
+        let timestamp = utils::format_timestamp(signal.timestamp, 8);
 
         let title = format!("🚨 K线信号报警 - {}", signal.symbol);
 
@@ -135,7 +129,7 @@ impl DingTalkService {
             "做空"
         };
 
-        let timestamp = format_timestamp(trading_signal.timestamp);
+        let timestamp = utils::format_timestamp(trading_signal.timestamp, 8);
 
         let risk_reward = (trading_signal.take_profit - trading_signal.entry_price).abs()
             / (trading_signal.entry_price - trading_signal.stop_loss).abs();
