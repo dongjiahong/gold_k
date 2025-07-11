@@ -22,17 +22,17 @@
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            padding: 20px;
+            padding: 15px;
         }
 
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         .header h1 {
-            font-size: 2.2em;
-            margin-bottom: 10px;
+            font-size: 1.1em;
+            margin-bottom: 5px;
             text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
@@ -40,46 +40,48 @@
             display: inline-block;
             color: #fff;
             text-decoration: none;
-            margin-bottom: 20px;
-            padding: 10px 20px;
+            margin-bottom: 15px;
+            padding: 5px 15px;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+            border-radius: 4px;
             transition: all 0.3s ease;
+            font-size: 0.8em;
         }
 
         .back-link:hover {
             background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
+            transform: translateY(-1px);
         }
 
         .section {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 30px;
-            margin-bottom: 30px;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
         .section h2 {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 5px;
+            font-size: 1em;
         }
 
         .control-panel {
             display: flex;
-            gap: 15px;
-            margin-bottom: 20px;
+            gap: 8px;
+            margin-bottom: 15px;
             flex-wrap: wrap;
         }
 
         .btn {
-            padding: 12px 24px;
+            padding: 6px 12px;
             border: none;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 4px;
+            font-size: 0.7em;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -95,7 +97,7 @@
 
         .btn-primary:hover {
             background: #45a049;
-            transform: translateY(-2px);
+            transform: translateY(-1px);
         }
 
         .btn-secondary {
@@ -123,11 +125,11 @@
 
         .status-indicator {
             display: inline-block;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.9em;
+            padding: 3px 6px;
+            border-radius: 10px;
+            font-size: 0.45em;
             font-weight: 500;
-            margin-left: 10px;
+            margin-left: 5px;
         }
 
         .status-running {
@@ -142,31 +144,31 @@
 
         .config-form {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-bottom: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 6px;
+            margin-bottom: 8px;
         }
 
         .form-group {
-            margin-bottom: 10px;
+            margin-bottom: 5px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 3px;
+            margin-bottom: 2px;
             font-weight: 500;
-            font-size: 0.8em;
+            font-size: 0.4em;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 6px;
+            padding: 3px;
             border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 4px;
+            border-radius: 2px;
             background: rgba(255, 255, 255, 0.1);
             color: #fff;
-            font-size: 12px;
+            font-size: 0.6em;
         }
 
         .form-group input::placeholder {
@@ -177,14 +179,14 @@
         .form-group select:focus {
             outline: none;
             border-color: #4CAF50;
-            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+            box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.2);
         }
 
         .checkbox-group {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-top: 10px;
+            gap: 4px;
+            margin-top: 5px;
         }
 
         .checkbox-group input[type="checkbox"] {
@@ -192,13 +194,13 @@
         }
 
         .results-section {
-            margin-top: 30px;
+            margin-top: 15px;
         }
 
         .results-controls {
             display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
+            gap: 5px;
+            margin-bottom: 15px;
             flex-wrap: wrap;
         }
 
@@ -206,13 +208,13 @@
             width: 100%;
             border-collapse: collapse;
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
+            border-radius: 5px;
             overflow: hidden;
         }
 
         .results-table th,
         .results-table td {
-            padding: 12px;
+            padding: 6px;
             text-align: left;
             border-bottom: 1px solid rgba(255, 255, 255, 0.2);
         }
@@ -220,11 +222,11 @@
         .results-table th {
             background: rgba(255, 255, 255, 0.1);
             font-weight: 600;
-            font-size: 0.9em;
+            font-size: 0.45em;
         }
 
         .results-table td {
-            font-size: 0.85em;
+            font-size: 0.425em;
         }
 
         .results-table tbody tr:hover {
@@ -232,10 +234,11 @@
         }
 
         .message {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 15px;
             font-weight: 500;
+            font-size: 0.7em;
         }
 
         .message.success {
@@ -253,13 +256,13 @@
         .loading {
             display: none;
             text-align: center;
-            padding: 20px;
+            padding: 15px;
         }
 
         .add-config-btn {
             background: #2196F3;
             color: #fff;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .add-config-btn:hover {
@@ -268,9 +271,9 @@
 
         .config-item {
             background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 15px;
+            border-radius: 4px;
+            padding: 6px;
+            margin-bottom: 8px;
             border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
@@ -278,20 +281,20 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             cursor: pointer;
         }
 
         .config-title {
             font-weight: bold;
-            font-size: 1em;
+            font-size: 0.5em;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 4px;
         }
 
         .config-toggle {
-            font-size: 0.8em;
+            font-size: 0.4em;
             opacity: 0.7;
         }
 
@@ -309,15 +312,15 @@
             background: #f44336;
             color: #fff;
             border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 2px 4px;
+            border-radius: 2px;
             cursor: pointer;
-            font-size: 0.7em;
+            font-size: 0.35em;
         }
 
         @media (max-width: 768px) {
             .container {
-                padding: 15px;
+                padding: 8px;
             }
 
             .control-panel {
@@ -329,12 +332,12 @@
             }
 
             .results-table {
-                font-size: 0.8em;
+                font-size: 0.4em;
             }
 
             .results-table th,
             .results-table td {
-                padding: 8px;
+                padding: 4px;
             }
         }
     </style>
