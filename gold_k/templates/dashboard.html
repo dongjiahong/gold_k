@@ -308,11 +308,15 @@
                 <table class="results-table">
                     <thead>
                         <tr>
-                            <th>时间</th>
+                            <th>K线时间</th>
                             <th>交易对</th>
-                            <th>信号类型</th>
+                            <th>影线类型</th>
+                            <th>K线维度</th>
                             <th>价格</th>
-                            <th>影线比例</th>
+                            <th>影/影比例</th>
+                            <th>主影/实体比例</th>
+                            <th>主影线长度</th>
+                            <th>平均成交量</th>
                             <th>K线类型</th>
                         </tr>
                     </thead>
@@ -408,8 +412,12 @@
                         <td>${new Date(signal.timestamp * 1000).toLocaleString()}</td>
                         <td>${signal.symbol}</td>
                         <td class="${signal.shadow_type === 'lower' ? 'signal-buy' : 'signal-sell'}">${signal.shadow_type}</td>
+                        <td>${signal.interval_type}</td>
                         <td>${signal.close_price}</td>
-                        <td>${(signal.shadow_ratio)}</td>
+                        <td>${signal.shadow_ratio.toFixed(2)}</td>
+                        <td>${(signal.main_shadow_length / signal.body_length).toFixed(2)}</td>
+                        <td>${signal.main_shadow_length.toFixed(2)}</td>
+                        <td>${signal.avg_volume}</td>
                         <td>${signal.candle_type}</td>
                     </tr>
                 `).join('');

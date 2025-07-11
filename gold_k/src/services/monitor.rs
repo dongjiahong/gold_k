@@ -528,13 +528,11 @@ impl MonitorService {
         let entry_price = signal.close_price;
         let (stop_loss, take_profit) = if signal_type == "long" {
             let stop_loss = signal.low_price;
-            let risk = entry_price - stop_loss;
-            let take_profit = entry_price + risk * config.risk_reward_ratio;
+            let take_profit = entry_price + signal.main_shadow_length * config.risk_reward_ratio;
             (stop_loss, take_profit)
         } else {
             let stop_loss = signal.high_price;
-            let risk = stop_loss - entry_price;
-            let take_profit = entry_price - risk * config.risk_reward_ratio;
+            let take_profit = entry_price - signal.main_shadow_length * config.risk_reward_ratio;
             (stop_loss, take_profit)
         };
 

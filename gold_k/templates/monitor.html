@@ -436,12 +436,12 @@
         // 渲染配置列表
         function renderConfigs() {
             const container = document.getElementById('config-list');
-            
+
             container.innerHTML = configs.map((config, index) => {
                 const contract = validateSymbol(config.symbol);
                 const isValidSymbol = !!contract;
                 const orderValue = calculateOrderValue(config.symbol, config.order_size);
-                
+
                 return `
                 <div class="config-item">
                     <div class="config-header" onclick="toggleConfig(${index})">
@@ -486,7 +486,7 @@
                             <input type="number" step="0.1" min="0.1" value="${config.main_shadow_body_ratio}" onchange="updateConfig(${index}, 'main_shadow_body_ratio', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
-                            <label>成交量倍数</label>
+                            <label>平均交量倍数</label>
                             <input type="number" step="0.1" min="0.1" value="${config.volume_multiplier}" onchange="updateConfig(${index}, 'volume_multiplier', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
@@ -668,6 +668,9 @@
             loadStatus();
             loadConfigs();
         });
+
+        // 每5秒钟更新一次状态
+        setInterval(loadStatus, 5000);
     </script>
 </body>
 
