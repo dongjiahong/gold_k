@@ -659,6 +659,9 @@
                     stopBtn.disabled = true;
                 }
             } catch (error) {
+                const indicator = document.getElementById('status-indicator');
+                indicator.textContent = '服务异常';
+                indicator.className = 'status-indicator status-stopped';
                 showMessage('加载状态失败: ' + error.message, 'error');
             }
         }
