@@ -126,10 +126,7 @@ impl MonitorService {
                     let contracts: Vec<Contract> =
                         serde_json::from_str(contracts_str).unwrap_or_default();
                     total_contracts = contracts.len() as i64;
-                    debug!(
-                        "total contracts: {:?}, contracts: {:?}",
-                        total_contracts, contracts_str
-                    );
+                    debug!("total contracts: {:?} ", total_contracts);
                 } else {
                     warn!("No contracts found for API Key: {:?}", api_key);
                 }

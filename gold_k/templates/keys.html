@@ -5,66 +5,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>密钥管理 - Gate.io K线监控工具</title>
+    <link rel="stylesheet" href="static/styles.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            min-height: 100vh;
-            color: #fff;
-        }
-
+        /* 密钥页面特定样式 */
         .container {
             max-width: 700px;
-            margin: 0 auto;
             padding: 14px;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 21px;
-        }
-
-        .header h1 {
+        .header.small h1 {
             font-size: 1.54em;
             margin-bottom: 7px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .back-link {
-            display: inline-block;
-            color: #fff;
-            text-decoration: none;
-            margin-bottom: 14px;
             padding: 7px 14px;
-            background: rgba(255, 255, 255, 0.1);
             border-radius: 5.6px;
-            transition: all 0.3s ease;
-        }
-
-        .back-link:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-2px);
+            margin-bottom: 14px;
         }
 
         .section {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10.5px;
             padding: 21px;
             margin-bottom: 21px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10.5px;
         }
 
         .section h2 {
             margin-bottom: 14px;
-            display: flex;
-            align-items: center;
             gap: 7px;
         }
 
@@ -73,77 +40,14 @@
         }
 
         .form-group label {
-            display: block;
             margin-bottom: 5.6px;
-            font-weight: 500;
         }
 
         .form-group input,
         .form-group textarea {
-            width: 100%;
             padding: 8.4px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5.6px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            font-size: 9.8px;
-        }
-
-        .form-group input::placeholder,
-        .form-group textarea::placeholder {
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .form-group input:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #4CAF50;
-            box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
-        }
-
-        .btn {
-            padding: 8.4px 16.8px;
-            border: none;
             border-radius: 5.6px;
             font-size: 9.8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-
-        .btn-primary {
-            background: #4CAF50;
-            color: #fff;
-        }
-
-        .btn-primary:hover {
-            background: #45a049;
-            transform: translateY(-2px);
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.2);
-            color: #fff;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .btn-danger {
-            background: #f44336;
-            color: #fff;
-        }
-
-        .btn-danger:hover {
-            background: #da190b;
-        }
-
-        .key-list {
-            margin-top: 14px;
         }
 
         .key-item {
@@ -161,7 +65,7 @@
 
         .key-item-header {
             display: flex;
-            justify-content: between;
+            justify-content: space-between;
             align-items: center;
             margin-bottom: 7px;
         }
@@ -183,257 +87,64 @@
             color: #fff;
         }
 
-        .status-inactive {
-            background: rgba(255, 255, 255, 0.3);
-            color: #fff;
-        }
-
         .key-item-info {
             font-size: 0.63em;
             opacity: 0.8;
             margin-bottom: 10.5px;
         }
-
-        .key-item-actions {
-            display: flex;
-            gap: 7px;
-        }
-
-        .message {
-            padding: 10.5px;
-            border-radius: 5.6px;
-            margin-bottom: 14px;
-            font-weight: 500;
-        }
-
-        .message.success {
-            background: rgba(76, 175, 80, 0.2);
-            border: 1px solid #4CAF50;
-            color: #4CAF50;
-        }
-
-        .message.error {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid #f44336;
-            color: #f44336;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 14px;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 10.5px;
-            }
-
-            .section {
-                padding: 14px;
-            }
-
-            .key-item-actions {
-                flex-direction: column;
-            }
-
-            .btn {
-                width: 100%;
-                margin-bottom: 7px;
-            }
-        }
     </style>
 </head>
 
 <body>
-    <div class="container">
+    <div class="container container-small">
         <a href="/" class="back-link">← 返回主页</a>
 
-        <div class="header">
+        <div class="header small">
             <h1>🔑 密钥管理</h1>
         </div>
 
         <div id="message-container"></div>
 
         <div class="section">
-            <h2>📝 API配置</h2>
-            <form id="key-form">
-                <div class="form-group">
-                    <label for="key-name">配置名称</label>
-                    <input type="text" id="key-name" placeholder="例如：主账号API" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="api-key">API Key</label>
-                    <input type="text" id="api-key" placeholder="输入Gate.io API Key" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="secret-key">Secret Key</label>
-                    <input type="password" id="secret-key" placeholder="输入Gate.io Secret Key" required>
-                </div>
-
-                <div class="form-group">
-                    <label for="webhook-url">钉钉Webhook URL (可选)</label>
-                    <textarea id="webhook-url" rows="3"
-                        placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."></textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="cookie">Cookie (可选)</label>
-                    <textarea id="cookie" rows="3" placeholder="用于调用Gate.io V2接口的浏览器Cookie"></textarea>
-                </div>
-
-                <button type="submit" class="btn btn-primary">保存配置</button>
-                <button type="button" class="btn btn-secondary" onclick="testDingTalk()">测试钉钉通知</button>
-                <button type="button" class="btn btn-secondary" onclick="fetchContracts()">拉取合约</button>
-            </form>
+            <h2>🏠 当前配置</h2>
+            <div id="loading" class="loading">加载中...</div>
+            <div id="current-config"></div>
         </div>
 
         <div class="section">
-            <h2>📋 当前配置</h2>
-            <div class="loading" id="loading">加载中...</div>
-            <div id="current-config" class="key-list"></div>
+            <h2>⚙️ API配置</h2>
+            <form id="key-form">
+                <div class="form-group">
+                    <label for="key-name">配置名称</label>
+                    <input type="text" id="key-name" required placeholder="为这个配置起个名字">
+                </div>
+                <div class="form-group">
+                    <label for="api-key">API Key</label>
+                    <input type="text" id="api-key" required placeholder="输入Gate.io API Key">
+                </div>
+                <div class="form-group">
+                    <label for="secret-key">Secret Key</label>
+                    <input type="password" id="secret-key" required placeholder="输入Gate.io Secret Key">
+                </div>
+                <div class="form-group">
+                    <label for="webhook-url">钉钉Webhook URL (可选)</label>
+                    <input type="url" id="webhook-url" placeholder="输入钉钉机器人Webhook URL">
+                </div>
+                <div class="form-group">
+                    <label for="cookie">Cookie (可选)</label>
+                    <textarea id="cookie" rows="3" placeholder="输入用于拉取合约数据的Cookie"></textarea>
+                </div>
+                <div class="control-panel">
+                    <button type="submit" class="btn btn-primary">保存配置</button>
+                    <button type="button" class="btn btn-secondary" onclick="fetchContracts()">拉取合约数据</button>
+                    <button type="button" class="btn btn-info" onclick="testDingTalk()">测试钉钉通知</button>
+                </div>
+            </form>
         </div>
     </div>
 
-    <script>
-        // 显示消息
-        function showMessage(message, type = 'success') {
-            const container = document.getElementById('message-container');
-            container.innerHTML = `<div class="message ${type}">${message}</div>`;
-            setTimeout(() => {
-                container.innerHTML = '';
-            }, 5000);
-        }
-
-        // 加载当前配置
-        async function loadCurrentConfig() {
-            const loadingEl = document.getElementById('loading');
-            const configEl = document.getElementById('current-config');
-
-            loadingEl.style.display = 'block';
-            configEl.innerHTML = '';
-
-            try {
-                const response = await fetch('/api/keys/current');
-                if (response.ok) {
-                    const config = await response.json();
-                    if (config) {
-                        // 填充表单
-                        document.getElementById('key-name').value = config.name;
-                        document.getElementById('api-key').value = config.api_key;
-                        document.getElementById('secret-key').value = config.secret_key;
-                        document.getElementById('webhook-url').value = config.webhook_url || '';
-                        document.getElementById('cookie').value = config.cookie || '';
-
-                        // 显示当前配置信息
-                        configEl.innerHTML = `
-                            <div class="key-item active">
-                                <div class="key-item-header">
-                                    <div class="key-item-name">${config.name}</div>
-                                    <div class="key-item-status status-active">当前配置</div>
-                                </div>
-                                <div class="key-item-info">
-                                    API Key: ${config.api_key.substring(0, 10)}...<br>
-                                    ${config.webhook_url ? '钉钉通知: 已配置' : '钉钉通知: 未配置'}<br>
-                                    ${config.cookie ? 'Cookie: 已配置' : 'Cookie: 未配置'}<br>
-                                    ${config.contracts ? '合约数据: 已缓存' : '合约数据: 未缓存'}
-                                </div>
-                            </div>
-                        `;
-                    } else {
-                        configEl.innerHTML = '<p style="text-align: center; opacity: 0.7;">暂无配置，请添加API配置</p>';
-                    }
-                } else {
-                    configEl.innerHTML = '<p style="text-align: center; opacity: 0.7;">暂无配置，请添加API配置</p>';
-                }
-            } catch (error) {
-                showMessage('加载配置失败: ' + error.message, 'error');
-            } finally {
-                loadingEl.style.display = 'none';
-            }
-        }
-
-        // 保存配置
-        document.getElementById('key-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const formData = {
-                name: document.getElementById('key-name').value,
-                api_key: document.getElementById('api-key').value,
-                secret_key: document.getElementById('secret-key').value,
-                webhook_url: document.getElementById('webhook-url').value || null,
-                cookie: document.getElementById('cookie').value || null
-            };
-
-            try {
-                const response = await fetch('/api/keys', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-
-                if (response.ok) {
-                    showMessage('配置保存成功！');
-                    loadCurrentConfig();
-                } else {
-                    const error = await response.text();
-                    showMessage('保存失败: ' + error, 'error');
-                }
-            } catch (error) {
-                showMessage('保存失败: ' + error.message, 'error');
-            }
-        });
-
-        // 拉取合约数据
-        async function fetchContracts() {
-            try {
-                showMessage('正在拉取合约数据...', 'success');
-                const response = await fetch('/api/contracts/fetch', {
-                    method: 'POST'
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    showMessage(`合约数据拉取成功！共获取${result.count}个合约`);
-                    loadCurrentConfig();
-                } else {
-                    const error = await response.text();
-                    showMessage('拉取失败: ' + error, 'error');
-                }
-            } catch (error) {
-                showMessage('拉取失败: ' + error.message, 'error');
-            }
-        }
-
-        // 测试钉钉通知
-        async function testDingTalk() {
-            const webhookUrl = document.getElementById('webhook-url').value;
-            if (!webhookUrl) {
-                showMessage('请先输入钉钉Webhook URL', 'error');
-                return;
-            }
-
-            try {
-                // 这里应该调用后端API测试钉钉通知
-                const response = await fetch('/api/dingding/test');
-                const result = await response.json();
-                if (result.success) {
-                    showMessage('钉钉通知测试成功！');
-                } else {
-                    showMessage('钉钉通知测试失败: ' + result.message, 'error');
-                }
-            } catch (error) {
-                showMessage('测试失败: ' + error.message, 'error');
-            }
-        }
-
-        // 页面加载时获取当前配置
-        loadCurrentConfig();
-    </script>
+    <script src="static/common.js"></script>
+    <script src="static/keys.js"></script>
 </body>
 
 </html>

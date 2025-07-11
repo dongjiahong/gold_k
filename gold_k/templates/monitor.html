@@ -5,223 +5,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>信号监控 - Gate.io K线监控工具</title>
+    <link rel="stylesheet" href="static/styles.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            min-height: 100vh;
-            color: #fff;
-        }
-
+        /* 监控页面特定样式 */
         .container {
             max-width: 1200px;
-            margin: 0 auto;
             padding: 15px;
         }
 
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .header h1 {
+        .header.tiny h1 {
             font-size: 1.1em;
-            margin-bottom: 5px;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
-        .back-link {
-            display: inline-block;
-            color: #fff;
-            text-decoration: none;
-            margin-bottom: 15px;
-            padding: 5px 15px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            transition: all 0.3s ease;
-            font-size: 0.8em;
-        }
-
-        .back-link:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
-        }
-
-        .section {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
+        .section.compact {
             padding: 15px;
-            margin-bottom: 15px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .section h2 {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            font-size: 1em;
-        }
-
-        .control-panel {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 4px;
-            font-size: 0.7em;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-
-        .btn-primary {
-            background: #4CAF50;
-            color: #fff;
-        }
-
-        .btn-primary:hover {
-            background: #45a049;
-            transform: translateY(-1px);
-        }
-
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.2);
-            color: #fff;
-        }
-
-        .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .btn-danger {
-            background: #f44336;
-            color: #fff;
-        }
-
-        .btn-danger:hover {
-            background: #da190b;
-        }
-
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .status-indicator {
-            display: inline-block;
-            padding: 3px 6px;
-            border-radius: 10px;
-            font-size: 0.45em;
-            font-weight: 500;
-            margin-left: 5px;
-        }
-
-        .status-running {
-            background: #4CAF50;
-            color: #fff;
-        }
-
-        .status-stopped {
-            background: #f44336;
-            color: #fff;
         }
 
         .config-form {
-            display: grid;
             grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
             gap: 6px;
-            margin-bottom: 8px;
-        }
-
-        .form-group {
-            margin-bottom: 5px;
         }
 
         .form-group label {
-            display: block;
-            margin-bottom: 2px;
-            font-weight: 500;
             font-size: 0.4em;
         }
 
         .form-group input,
         .form-group select {
-            width: 100%;
             padding: 3px;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 2px;
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
             font-size: 0.6em;
         }
 
-        .form-group input::placeholder {
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #4CAF50;
-            box-shadow: 0 0 0 1px rgba(76, 175, 80, 0.2);
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-top: 5px;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
-        }
-
-        .results-section {
-            margin-top: 15px;
-        }
-
-        .results-controls {
-            display: flex;
-            gap: 5px;
-            margin-bottom: 15px;
-            flex-wrap: wrap;
-        }
-
-        .results-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 5px;
-            overflow: hidden;
-        }
-
-        .results-table th,
-        .results-table td {
-            padding: 6px;
-            text-align: left;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        .btn.tiny {
+            padding: 6px 12px;
+            font-size: 0.7em;
         }
 
         .results-table th {
-            background: rgba(255, 255, 255, 0.1);
-            font-weight: 600;
             font-size: 0.45em;
         }
 
@@ -229,116 +49,23 @@
             font-size: 0.425em;
         }
 
-        .results-table tbody tr:hover {
-            background: rgba(255, 255, 255, 0.05);
-        }
-
-        .message {
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 15px;
-            font-weight: 500;
-            font-size: 0.7em;
-        }
-
-        .message.success {
-            background: rgba(76, 175, 80, 0.2);
-            border: 1px solid #4CAF50;
-            color: #4CAF50;
-        }
-
-        .message.error {
-            background: rgba(244, 67, 54, 0.2);
-            border: 1px solid #f44336;
-            color: #f44336;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 15px;
-        }
-
-        .add-config-btn {
-            background: #2196F3;
-            color: #fff;
-            margin-bottom: 15px;
-        }
-
-        .add-config-btn:hover {
-            background: #1976D2;
-        }
-
-        .config-item {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 4px;
-            padding: 6px;
-            margin-bottom: 8px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        .config-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 5px;
-            cursor: pointer;
-        }
-
         .config-title {
-            font-weight: bold;
             font-size: 0.5em;
-            display: flex;
-            align-items: center;
-            gap: 4px;
         }
 
         .config-toggle {
             font-size: 0.4em;
-            opacity: 0.7;
-        }
-
-        .config-form {
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-        }
-
-        .config-form.collapsed {
-            max-height: 0;
-            margin-bottom: 0;
         }
 
         .config-remove {
-            background: #f44336;
-            color: #fff;
-            border: none;
-            padding: 2px 4px;
-            border-radius: 2px;
-            cursor: pointer;
             font-size: 0.35em;
+            padding: 2px 4px;
         }
 
-        @media (max-width: 768px) {
-            .container {
-                padding: 8px;
-            }
-
-            .control-panel {
-                flex-direction: column;
-            }
-
-            .config-form {
-                grid-template-columns: 1fr;
-            }
-
-            .results-table {
-                font-size: 0.4em;
-            }
-
-            .results-table th,
-            .results-table td {
-                padding: 4px;
-            }
+        .status-indicator {
+            font-size: 0.45em;
+            padding: 3px 6px;
+            border-radius: 10px;
         }
     </style>
 </head>
@@ -347,337 +74,35 @@
     <div class="container">
         <a href="/" class="back-link">← 返回主页</a>
 
-        <div class="header">
+        <div class="header tiny">
             <h1>🔍 信号监控</h1>
         </div>
 
         <div id="message-container"></div>
 
-        <div class="section">
+        <div class="section compact">
             <h2>🎛️ 监控控制</h2>
             <div class="control-panel">
-                <button id="start-btn" class="btn btn-primary" onclick="startMonitor()">启动监控</button>
-                <button id="stop-btn" class="btn btn-danger" onclick="stopMonitor()">停止监控</button>
-                <button class="btn btn-secondary" onclick="loadStatus()">刷新状态</button>
+                <button id="start-btn" class="btn btn-primary tiny" onclick="startMonitor()">启动监控</button>
+                <button id="stop-btn" class="btn btn-danger tiny" onclick="stopMonitor()">停止监控</button>
+                <button class="btn btn-secondary tiny" onclick="loadStatus()">刷新状态</button>
                 <span id="status-indicator" class="status-indicator status-stopped">已停止</span>
             </div>
         </div>
 
-        <div class="section">
+        <div class="section compact">
             <h2>⚙️ 监控配置</h2>
-            <button class="btn add-config-btn" onclick="addConfig()">+ 添加监控币种</button>
+            <button class="btn btn-info tiny" onclick="addConfig()">+ 添加监控币种</button>
             <div id="config-list"></div>
             <div class="control-panel">
-                <button class="btn btn-primary" onclick="saveConfigs()">保存配置</button>
-                <button class="btn btn-secondary" onclick="loadConfigs()">重新加载</button>
+                <button class="btn btn-primary tiny" onclick="saveConfigs()">保存配置</button>
+                <button class="btn btn-secondary tiny" onclick="loadConfigs()">重新加载</button>
             </div>
         </div>
     </div>
 
-    <script>
-        let configs = [];
-
-        // 从localStorage获取合约信息
-        function getContractInfo() {
-            try {
-                const contractsData = localStorage.getItem('gate_contracts');
-                return contractsData ? JSON.parse(contractsData) : [];
-            } catch (error) {
-                console.warn('获取合约信息失败:', error);
-                return [];
-            }
-        }
-
-        // 验证交易对是否存在
-        function validateSymbol(symbol) {
-            const contracts = getContractInfo();
-            return contracts.find(contract => contract.name === symbol);
-        }
-
-        // 获取合约乘数用于计算订单价值
-        function getQuantoMultiplier(symbol) {
-            const contract = validateSymbol(symbol);
-            return contract ? parseFloat(contract.quanto_multiplier) : 1;
-        }
-
-        // 计算订单价值（张数 * 乘数）
-        function calculateOrderValue(symbol, orderSize) {
-            const multiplier = getQuantoMultiplier(symbol);
-            return (orderSize * multiplier).toFixed(4);
-        }
-
-        // 显示消息
-        function showMessage(message, type = 'success') {
-            const container = document.getElementById('message-container');
-            container.innerHTML = `<div class="message ${type}">${message}</div>`;
-            setTimeout(() => {
-                container.innerHTML = '';
-            }, 5000);
-        }
-
-        // 添加配置项
-        function addConfig() {
-            const config = {
-                symbol: 'BTC_USDT',
-                interval_type: '15m',
-                frequency: 60,
-                history_hours: 3,
-                shadow_ratio: 4.5,
-                main_shadow_body_ratio: 1.0,
-                volume_multiplier: 1.5,
-                order_size: 1.0,
-                risk_reward_ratio: 1.2,
-                enable_auto_trading: false,
-                enable_dingtalk: false,
-                trade_direction: 'both',
-                is_active: true
-            };
-            configs.push(config);
-            renderConfigs();
-        }
-
-        // 渲染配置列表
-        function renderConfigs() {
-            const container = document.getElementById('config-list');
-
-            container.innerHTML = configs.map((config, index) => {
-                const contract = validateSymbol(config.symbol);
-                const isValidSymbol = !!contract;
-                const orderValue = calculateOrderValue(config.symbol, config.order_size);
-
-                return `
-                <div class="config-item">
-                    <div class="config-header" onclick="toggleConfig(${index})">
-                        <div class="config-title">
-                            ${config.symbol} - ${config.interval_type}
-                            ${!isValidSymbol ? '<span style="color: #f44336; font-size: 0.8em;">⚠️ 无效交易对</span>' : ''}
-                            <span class="config-toggle" id="toggle-${index}">▼</span>
-                        </div>
-                        <button class="config-remove" onclick="event.stopPropagation(); removeConfig(${index})">删除</button>
-                    </div>
-                    <div class="config-form" id="config-form-${index}">
-                        <div class="form-group">
-                            <label>交易对 ${!isValidSymbol ? '<span style="color: #f44336;">*无效</span>' : ''}</label>
-                            <input type="text" value="${config.symbol}" onchange="updateSymbol(${index}, this.value)" placeholder="如: BTC_USDT">
-                        </div>
-                        <div class="form-group">
-                            <label>时间周期</label>
-                            <select onchange="updateConfig(${index}, 'interval_type', this.value)">
-                                <option value="1m" ${config.interval_type === '1m' ? 'selected' : ''}>1分钟</option>
-                                <option value="5m" ${config.interval_type === '5m' ? 'selected' : ''}>5分钟</option>
-                                <option value="15m" ${config.interval_type === '15m' ? 'selected' : ''}>15分钟</option>
-                                <option value="30m" ${config.interval_type === '30m' ? 'selected' : ''}>30分钟</option>
-                                <option value="1h" ${config.interval_type === '1h' ? 'selected' : ''}>1小时</option>
-                                <option value="4h" ${config.interval_type === '4h' ? 'selected' : ''}>4小时</option>
-                                <option value="1d" ${config.interval_type === '1d' ? 'selected' : ''}>1天</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>检查频率(秒)</label>
-                            <input type="number" min="3" value="${config.frequency}" onchange="updateConfig(${index}, 'frequency', parseInt(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>历史时间(小时)</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.history_hours}" onchange="updateConfig(${index}, 'history_hours', parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>影线比例阈值</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.shadow_ratio}" onchange="updateConfig(${index}, 'shadow_ratio', parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>影线/实体比例</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.main_shadow_body_ratio}" onchange="updateConfig(${index}, 'main_shadow_body_ratio', parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>平均交量倍数</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.volume_multiplier}" onchange="updateConfig(${index}, 'volume_multiplier', parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>订单大小(张) ${isValidSymbol ? `<span style="color: #4CAF50; font-size: 0.8em;">≈ ${orderValue} ${config.symbol.split('_')[0]}</span>` : ''}</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.order_size}" onchange="updateOrderSize(${index}, parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>风险收益比</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.risk_reward_ratio}" onchange="updateConfig(${index}, 'risk_reward_ratio', parseFloat(this.value))">
-                        </div>
-                        <div class="form-group">
-                            <label>交易方向</label>
-                            <select onchange="updateConfig(${index}, 'trade_direction', this.value)">
-                                <option value="both" ${config.trade_direction === 'both' ? 'selected' : ''}>双向</option>
-                                <option value="long" ${config.trade_direction === 'long' ? 'selected' : ''}>仅做多</option>
-                                <option value="short" ${config.trade_direction === 'short' ? 'selected' : ''}>仅做空</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <div class="checkbox-group">
-                                <input type="checkbox" ${config.enable_auto_trading ? 'checked' : ''} onchange="updateConfig(${index}, 'enable_auto_trading', this.checked)">
-                                <label>启用自动交易</label>
-                            </div>
-                            <div class="checkbox-group">
-                                <input type="checkbox" ${config.enable_dingtalk ? 'checked' : ''} onchange="updateConfig(${index}, 'enable_dingtalk', this.checked)">
-                                <label>启用钉钉通知</label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `}).join('');
-        }
-
-        // 更新交易对
-        function updateSymbol(index, value) {
-            updateConfig(index, 'symbol', value);
-            // 验证交易对并显示提示
-            const contract = validateSymbol(value);
-            if (!contract && value) {
-                showMessage(`警告: 交易对 ${value} 不存在于合约列表中`, 'error');
-            }
-            renderConfigs(); // 重新渲染以更新订单价值显示
-        }
-
-        // 更新订单大小
-        function updateOrderSize(index, value) {
-            updateConfig(index, 'order_size', value);
-            renderConfigs(); // 重新渲染以更新订单价值显示
-        }
-
-        // 切换配置项折叠状态
-        function toggleConfig(index) {
-            const form = document.getElementById(`config-form-${index}`);
-            const toggle = document.getElementById(`toggle-${index}`);
-
-            if (form.classList.contains('collapsed')) {
-                form.classList.remove('collapsed');
-                toggle.textContent = '▼';
-            } else {
-                form.classList.add('collapsed');
-                toggle.textContent = '▶';
-            }
-        }
-
-        // 更新配置
-        function updateConfig(index, key, value) {
-            configs[index][key] = value;
-        }
-
-        // 删除配置
-        function removeConfig(index) {
-            configs.splice(index, 1);
-            renderConfigs();
-        }
-
-        // 保存配置前验证
-        async function saveConfigs() {
-            // 验证所有交易对
-            const invalidSymbols = configs.filter(config => !validateSymbol(config.symbol));
-            if (invalidSymbols.length > 0) {
-                const symbols = invalidSymbols.map(config => config.symbol).join(', ');
-                showMessage(`错误: 以下交易对无效: ${symbols}`, 'error');
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/configs', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(configs)
-                });
-
-                if (response.ok) {
-                    showMessage('配置保存成功！');
-                } else {
-                    const error = await response.text();
-                    showMessage('保存失败: ' + error, 'error');
-                }
-            } catch (error) {
-                showMessage('保存失败: ' + error.message, 'error');
-            }
-        }
-
-        // 加载配置
-        async function loadConfigs() {
-            try {
-                const response = await fetch('/api/configs');
-                configs = await response.json();
-                renderConfigs();
-            } catch (error) {
-                showMessage('加载配置失败: ' + error.message, 'error');
-            }
-        }
-
-        // 启动监控
-        async function startMonitor() {
-            try {
-                const response = await fetch('/api/monitor/start', { method: 'POST' });
-                const result = await response.json();
-
-                if (result.success) {
-                    showMessage(result.message);
-                    loadStatus();
-                } else {
-                    showMessage(result.message, 'error');
-                }
-            } catch (error) {
-                showMessage('启动失败: ' + error.message, 'error');
-            }
-        }
-
-        // 停止监控
-        async function stopMonitor() {
-            try {
-                const response = await fetch('/api/monitor/stop', { method: 'POST' });
-                const result = await response.json();
-
-                if (result.success) {
-                    showMessage(result.message);
-                    loadStatus();
-                } else {
-                    showMessage(result.message, 'error');
-                }
-            } catch (error) {
-                showMessage('停止失败: ' + error.message, 'error');
-            }
-        }
-
-        // 加载状态
-        async function loadStatus() {
-            try {
-                const response = await fetch('/api/monitor/status');
-                const status = await response.json();
-
-                const indicator = document.getElementById('status-indicator');
-                const startBtn = document.getElementById('start-btn');
-                const stopBtn = document.getElementById('stop-btn');
-
-                if (status.is_running) {
-                    indicator.textContent = '运行中';
-                    indicator.className = 'status-indicator status-running';
-                    startBtn.disabled = true;
-                    stopBtn.disabled = false;
-                } else {
-                    indicator.textContent = '已停止';
-                    indicator.className = 'status-indicator status-stopped';
-                    startBtn.disabled = false;
-                    stopBtn.disabled = true;
-                }
-            } catch (error) {
-                const indicator = document.getElementById('status-indicator');
-                indicator.textContent = '服务异常';
-                indicator.className = 'status-indicator status-stopped';
-                showMessage('加载状态失败: ' + error.message, 'error');
-            }
-        }
-
-        // 页面加载时初始化
-        document.addEventListener('DOMContentLoaded', function () {
-            loadStatus();
-            loadConfigs();
-        });
-
-        // 每5秒钟更新一次状态
-        setInterval(loadStatus, 5000);
-    </script>
+    <script src="static/common.js"></script>
+    <script src="static/monitor.js"></script>
 </body>
 
 </html>

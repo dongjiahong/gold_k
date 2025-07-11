@@ -80,7 +80,7 @@ pub async fn start() -> anyhow::Result<()> {
         .route("/api/dingding/test", get(dingding_test))
         .route("/keys", get(keys_page))
         .route("/monitor", get(monitor_page))
-        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/static", ServeDir::new("gold_k/templates/static"))
         .layer(ServiceBuilder::new().layer(CorsLayer::permissive()))
         .with_state(state);
 
