@@ -14,7 +14,9 @@ use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::{info, warn};
 
-use crate::repository::{ApiKeyRepository, MonitorConfigRepository, SignalRepository, OrderRepository};
+use crate::repository::{
+    ApiKeyRepository, MonitorConfigRepository, OrderRepository, SignalRepository,
+};
 use crate::services::*;
 use crate::templates::*;
 use crate::{config::get_global_config, models::*};
@@ -135,7 +137,9 @@ async fn save_api_keys(
         &payload.secret_key,
         payload.webhook_url.as_deref(),
         payload.cookie.as_deref(),
-    ).await {
+    )
+    .await
+    {
         Ok(_) => {
             // 更新服务配置
             let mut gate_service = state.gate_service.write().await;
@@ -285,10 +289,8 @@ async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
     let current_key = match ApiKeyRepository::get_active(&state.db).await {
         Ok(Some(key)) => key,
         Ok(None) => {
-            return Json(
-                serde_json::json!({"success": false, "message": "未找到活跃的API配置"}),
-            )
-            .into_response();
+            return Json(serde_json::json!({"success": false, "message": "未找到活跃的API配置"}))
+                .into_response();
         }
         Err(e) => {
             warn!("Failed to get current api key: {}", e);
@@ -303,7 +305,9 @@ async fn fetch_contracts(State(state): State<AppState>) -> impl IntoResponse {
             let contracts_json = serde_json::to_string(&contracts).unwrap_or_default();
 
             // 更新数据库中的合约数据
-            if let Err(e) = ApiKeyRepository::update_contracts(&state.db, current_key.id, &contracts_json).await {
+            if let Err(e) =
+                ApiKeyRepository::update_contracts(&state.db, current_key.id, &contracts_json).await
+            {
                 warn!("Failed to update contracts: {}", e);
             }
 
