@@ -15,10 +15,6 @@ use tracing::{debug, error, info, warn};
 // precision: "0.01" -> 2
 fn round_price(price: f64, precision: &str) -> f64 {
     let decimal_places = precision.split('.').nth(1).map(|s| s.len()).unwrap_or(0);
-    println!(
-        "Rounding price: {} with precision: {}, decimal places: {}",
-        price, precision, decimal_places
-    );
     let multiplier = 10_f64.powi(decimal_places as i32);
     (price * multiplier).round() / multiplier
 }
@@ -364,8 +360,12 @@ impl MonitorService {
     ) -> Option<Signal> {
         // 计算影线和实体长度
         let body_length = (latest.close - latest.open).abs();
+        // 影线在上面
         let upper_shadow_length = latest.high - latest.close.max(latest.open);
+        let upper_profit = latest.high - latest.close;
+        // 影线在下面
         let lower_shadow_length = latest.open.min(latest.close) - latest.low;
+        let lower_profit = latest.close - latest.low;
 
         // 检查是否有长影线
         let has_long_upper = upper_shadow_length > body_length * config.main_shadow_body_ratio;
@@ -381,49 +381,54 @@ impl MonitorService {
         }
 
         // 确定主影线类型和长度
-        let (shadow_type, main_shadow_length, shadow_ratio) = if has_long_upper && has_long_lower {
-            if upper_shadow_length >= lower_shadow_length {
+        let (shadow_type, main_shadow_length, main_profit, shadow_ratio) =
+            if has_long_upper && has_long_lower {
+                if upper_shadow_length >= lower_shadow_length {
+                    (
+                        "upper",
+                        upper_shadow_length,
+                        upper_profit,
+                        if lower_shadow_length > 0.0 {
+                            upper_shadow_length / lower_shadow_length
+                        } else {
+                            upper_shadow_length * 10000.0 // 当只有一边影线时，放大比例保证通过
+                        },
+                    )
+                } else {
+                    (
+                        "lower",
+                        lower_shadow_length,
+                        lower_profit,
+                        if upper_shadow_length > 0.0 {
+                            lower_shadow_length / upper_shadow_length
+                        } else {
+                            lower_shadow_length * 10000.0
+                        },
+                    )
+                }
+            } else if has_long_upper {
                 (
                     "upper",
                     upper_shadow_length,
+                    upper_profit,
                     if lower_shadow_length > 0.0 {
                         upper_shadow_length / lower_shadow_length
                     } else {
-                        upper_shadow_length * 10000.0 // 当只有一边影线时，放大比例保证通过
+                        upper_shadow_length * 10000.0
                     },
                 )
             } else {
                 (
                     "lower",
                     lower_shadow_length,
+                    lower_profit,
                     if upper_shadow_length > 0.0 {
                         lower_shadow_length / upper_shadow_length
                     } else {
                         lower_shadow_length * 10000.0
                     },
                 )
-            }
-        } else if has_long_upper {
-            (
-                "upper",
-                upper_shadow_length,
-                if lower_shadow_length > 0.0 {
-                    upper_shadow_length / lower_shadow_length
-                } else {
-                    upper_shadow_length * 10000.0
-                },
-            )
-        } else {
-            (
-                "lower",
-                lower_shadow_length,
-                if upper_shadow_length > 0.0 {
-                    lower_shadow_length / upper_shadow_length
-                } else {
-                    lower_shadow_length * 10000.0
-                },
-            )
-        };
+            };
 
         // 检查影线比例是否满足条件
         if shadow_ratio < config.shadow_ratio {
@@ -484,6 +489,7 @@ impl MonitorService {
             shadow_type: shadow_type.to_string(),
             body_length,
             main_shadow_length,
+            main_profit,
             shadow_ratio,
             volume_multiplier,
             avg_volume: Some(avg_volume),
@@ -532,11 +538,11 @@ impl MonitorService {
         let entry_price = signal.close_price;
         let (stop_loss, take_profit) = if signal_type == "long" {
             let stop_loss = signal.low_price;
-            let take_profit = entry_price + signal.main_shadow_length * config.risk_reward_ratio;
+            let take_profit = entry_price + signal.main_profit * config.risk_reward_ratio;
             (stop_loss, take_profit)
         } else {
             let stop_loss = signal.high_price;
-            let take_profit = entry_price - signal.main_shadow_length * config.risk_reward_ratio;
+            let take_profit = entry_price - signal.main_profit * config.risk_reward_ratio;
             (stop_loss, take_profit)
         };
 
