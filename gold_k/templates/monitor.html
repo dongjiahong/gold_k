@@ -318,6 +318,51 @@
             font-size: 0.35em;
         }
 
+        .unsaved-indicator {
+            display: inline-block;
+            background: #e90dd3;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 0.6em;
+            font-weight: 500;
+            margin-left: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .save-btn-highlight {
+            animation: highlight 0.5s ease;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+
+        @keyframes highlight {
+            0% {
+                background: #4CAF50;
+            }
+
+            50% {
+                background: #66BB6A;
+            }
+
+            100% {
+                background: #4CAF50;
+            }
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 8px;
@@ -364,11 +409,12 @@
         </div>
 
         <div class="section">
-            <h2>⚙️ 监控配置</h2>
+            <h2>⚙️ 监控配置 <span id="unsaved-indicator" class="unsaved-indicator" style="display: none;">有未保存的修改</span>
+            </h2>
             <button class="btn add-config-btn" onclick="addConfig()">+ 添加监控币种</button>
             <div id="config-list"></div>
             <div class="control-panel">
-                <button class="btn btn-primary" onclick="saveConfigs()">保存配置</button>
+                <button id="save-btn" class="btn btn-primary" onclick="saveConfigs()">保存配置</button>
                 <button class="btn btn-secondary" onclick="loadConfigs()">重新加载</button>
             </div>
         </div>
@@ -376,6 +422,53 @@
 
     <script>
         let configs = [];
+        let hasUnsavedChanges = false;
+        let originalConfigsJson = '';
+
+        // 标记有未保存的修改
+        function markUnsaved() {
+            hasUnsavedChanges = true;
+            document.getElementById('unsaved-indicator').style.display = 'inline-block';
+
+            // 高亮保存按钮（但不要每次都触发动画，避免频繁闪烁）
+            const saveBtn = document.getElementById('save-btn');
+            if (!saveBtn.classList.contains('save-btn-highlight')) {
+                saveBtn.classList.add('save-btn-highlight');
+                setTimeout(() => {
+                    saveBtn.classList.remove('save-btn-highlight');
+                }, 500);
+            }
+        }
+
+        // 清除未保存标记
+        function clearUnsaved() {
+            hasUnsavedChanges = false;
+            document.getElementById('unsaved-indicator').style.display = 'none';
+            originalConfigsJson = JSON.stringify(configs);
+        }
+
+        // 检查是否有未保存的修改
+        function checkUnsavedChanges() {
+            const currentConfigsJson = JSON.stringify(configs);
+            if (currentConfigsJson !== originalConfigsJson) {
+                if (!hasUnsavedChanges) {
+                    markUnsaved();
+                }
+            } else {
+                if (hasUnsavedChanges) {
+                    clearUnsaved();
+                }
+            }
+        }
+
+        // 页面离开前提醒
+        window.addEventListener('beforeunload', function (e) {
+            if (hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '您有未保存的配置修改，确定要离开吗？';
+                return '您有未保存的配置修改，确定要离开吗？';
+            }
+        });
 
         // 从localStorage获取合约信息
         function getContractInfo() {
@@ -438,6 +531,7 @@
             };
             configs.push(config);
             renderConfigs();
+            checkUnsavedChanges();
         }
 
         // 渲染配置列表
@@ -465,8 +559,8 @@
                             <input type="text" value="${config.symbol}" onchange="updateSymbol(${index}, this.value)" placeholder="如: BTC_USDT">
                         </div>
                         <div class="form-group">
-                            <label>时间周期</label>
-                            <select onchange="updateConfig(${index}, 'interval_type', this.value)">
+                            <label>K线维度</label>
+                            <select onchange="updateConfigWithUnsaved(${index}, 'interval_type', this.value)">
                                 <option value="1m" ${config.interval_type === '1m' ? 'selected' : ''}>1分钟</option>
                                 <option value="5m" ${config.interval_type === '5m' ? 'selected' : ''}>5分钟</option>
                                 <option value="15m" ${config.interval_type === '15m' ? 'selected' : ''}>15分钟</option>
@@ -478,39 +572,39 @@
                         </div>
                         <div class="form-group">
                             <label>检查频率(秒)</label>
-                            <input type="number" min="3" value="${config.frequency}" onchange="updateConfig(${index}, 'frequency', parseInt(this.value))">
+                            <input type="number" min="3" value="${config.frequency}" onchange="updateConfigWithUnsaved(${index}, 'frequency', parseInt(this.value))">
                         </div>
                         <div class="form-group">
                             <label>历史时间(小时)</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.history_hours}" onchange="updateConfig(${index}, 'history_hours', parseFloat(this.value))">
+                            <input type="number" step="0.1" min="0.1" value="${config.history_hours}" onchange="updateConfigWithUnsaved(${index}, 'history_hours', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>影线比例阈值</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.shadow_ratio}" onchange="updateConfig(${index}, 'shadow_ratio', parseFloat(this.value))">
+                            <input type="number" step="0.1" min="0.1" value="${config.shadow_ratio}" onchange="updateConfigWithUnsaved(${index}, 'shadow_ratio', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>影线/实体比例</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.main_shadow_body_ratio}" onchange="updateConfig(${index}, 'main_shadow_body_ratio', parseFloat(this.value))">
+                            <input type="number" step="0.1" min="0.1" value="${config.main_shadow_body_ratio}" onchange="updateConfigWithUnsaved(${index}, 'main_shadow_body_ratio', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>平均交量倍数</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.volume_multiplier}" onchange="updateConfig(${index}, 'volume_multiplier', parseFloat(this.value))">
+                            <input type="number" step="0.1" min="0.1" value="${config.volume_multiplier}" onchange="updateConfigWithUnsaved(${index}, 'volume_multiplier', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>订单大小(张) ${isValidSymbol ? `<span style="color: #4CAF50; font-size: 0.8em;">≈ ${orderValue} ${config.symbol.split('_')[0]}</span>` : ''}</label>
                             <input type="number" step="0.1" min="0.1" value="${config.order_size}" onchange="updateOrderSize(${index}, parseFloat(this.value))">
                         </div>
                         <div class="form-group">
-                            <label>风险收益比</label>
-                            <input type="number" step="0.1" min="0.1" value="${config.risk_reward_ratio}" onchange="updateConfig(${index}, 'risk_reward_ratio', parseFloat(this.value))">
+                            <label>盈亏比</label>
+                            <input type="number" step="0.1" min="0.1" value="${config.risk_reward_ratio}" onchange="updateConfigWithUnsaved(${index}, 'risk_reward_ratio', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>预计收益率(%)</label>
-                            <input type="number" step="0.005" min="0.01" value="${config.expected_profit_rate || 0.1}" onchange="updateConfig(${index}, 'expected_profit_rate', parseFloat(this.value))">
+                            <input type="number" step="0.005" min="0.01" value="${config.expected_profit_rate || 0.1}" onchange="updateConfigWithUnsaved(${index}, 'expected_profit_rate', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
                             <label>交易方向</label>
-                            <select onchange="updateConfig(${index}, 'trade_direction', this.value)">
+                            <select onchange="updateConfigWithUnsaved(${index}, 'trade_direction', this.value)">
                                 <option value="both" ${config.trade_direction === 'both' ? 'selected' : ''}>双向</option>
                                 <option value="long" ${config.trade_direction === 'long' ? 'selected' : ''}>仅做多</option>
                                 <option value="short" ${config.trade_direction === 'short' ? 'selected' : ''}>仅做空</option>
@@ -518,28 +612,28 @@
                         </div>
                         <div class="form-group">
                             <label>下单方式</label>
-                            <select onchange="updateConfig(${index}, 'order_type', this.value)">
+                            <select onchange="updateConfigWithUnsaved(${index}, 'order_type', this.value)">
                                 <option value="market" ${config.order_type === 'market' ? 'selected' : ''}>市价单</option>
                                 <option value="limit" ${config.order_type === 'limit' ? 'selected' : ''}>限价单</option>
                             </select>
                         </div>
                         <div class="form-group">
                             <div class="checkbox-group">
-                                <input type="checkbox" ${config.enable_auto_trading ? 'checked' : ''} onchange="updateConfig(${index}, 'enable_auto_trading', this.checked)">
+                                <input type="checkbox" ${config.enable_auto_trading ? 'checked' : ''} onchange="updateConfigWithUnsaved(${index}, 'enable_auto_trading', this.checked)">
                                 <label>启用自动交易</label>
                             </div>
                             <div class="checkbox-group">
-                                <input type="checkbox" ${config.enable_dingtalk ? 'checked' : ''} onchange="updateConfig(${index}, 'enable_dingtalk', this.checked)">
+                                <input type="checkbox" ${config.enable_dingtalk ? 'checked' : ''} onchange="updateConfigWithUnsaved(${index}, 'enable_dingtalk', this.checked)">
                                 <label>启用钉钉通知</label>
                             </div>
                         </div>
                         <div class="form-group">
                             <div class="checkbox-group">
-                                <input type="checkbox" ${config.long_k_long ? 'checked' : ''} onchange="updateConfig(${index}, 'long_k_long', this.checked)">
+                                <input type="checkbox" ${config.long_k_long ? 'checked' : ''} onchange="updateConfigWithUnsaved(${index}, 'long_k_long', this.checked)">
                                 <label>阳K才做多</label>
                             </div>
                             <div class="checkbox-group">
-                                <input type="checkbox" ${config.short_k_short ? 'checked' : ''} onchange="updateConfig(${index}, 'short_k_short', this.checked)">
+                                <input type="checkbox" ${config.short_k_short ? 'checked' : ''} onchange="updateConfigWithUnsaved(${index}, 'short_k_short', this.checked)">
                                 <label>阴K才做空</label>
                             </div>
                         </div>
@@ -557,12 +651,20 @@
                 showMessage(`警告: 交易对 ${value} 不存在于合约列表中`, 'error');
             }
             renderConfigs(); // 重新渲染以更新订单价值显示
+            checkUnsavedChanges();
         }
 
         // 更新订单大小
         function updateOrderSize(index, value) {
             updateConfig(index, 'order_size', value);
             renderConfigs(); // 重新渲染以更新订单价值显示
+            checkUnsavedChanges();
+        }
+
+        // 更新配置并检查是否需要标记为未保存
+        function updateConfigWithUnsaved(index, key, value) {
+            updateConfig(index, key, value);
+            checkUnsavedChanges();
         }
 
         // 切换配置项折叠状态
@@ -589,6 +691,7 @@
         function removeConfig(index) {
             configs.splice(index, 1);
             renderConfigs();
+            checkUnsavedChanges();
         }
 
         // 保存配置前验证
@@ -614,6 +717,7 @@
 
                 if (response.ok) {
                     showMessage('配置保存成功！');
+                    clearUnsaved(); // 清除未保存标记
                 } else {
                     const error = await response.text();
                     showMessage('保存失败: ' + error, 'error');
@@ -629,6 +733,7 @@
                 const response = await fetch('/api/configs');
                 configs = await response.json();
                 renderConfigs();
+                clearUnsaved(); // 清除未保存标记，因为是从服务器重新加载的
             } catch (error) {
                 showMessage('加载配置失败: ' + error.message, 'error');
             }
