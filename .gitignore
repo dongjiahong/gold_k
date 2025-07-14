@@ -29,3 +29,5 @@ config.toml
 .env
 data
 gold_k_ui
+logs
+*.log

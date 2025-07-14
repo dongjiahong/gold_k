@@ -11,6 +11,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = [
     "env-filter",
     "local-time",
+    "json",
 ] }
 
 [build-dependencies]
