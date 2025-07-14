@@ -174,6 +174,31 @@
             background: rgba(255, 255, 255, 0.15);
         }
 
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .export-btn {
+            padding: 8px 16px;
+            background: rgba(76, 175, 80, 0.8);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.85em;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .export-btn:hover {
+            background: rgba(76, 175, 80, 1);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
         .tab-content {
             display: none;
         }
@@ -246,6 +271,16 @@
             .status-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
+
+            .export-buttons {
+                flex-direction: column;
+                gap: 8px;
+            }
+
+            .export-btn {
+                padding: 10px 16px;
+                font-size: 0.9em;
+            }
         }
     </style>
 </head>
@@ -299,6 +334,11 @@
 
         <div class="results-section">
             <h2>📈 监控结果</h2>
+            <div class="export-buttons">
+                <button class="export-btn" onclick="exportSignals()">📥 导出信号记录近200条</button>
+                <button class="export-btn" onclick="exportOrders()">📥 导出交易记录近200条</button>
+            </div>
+
             <div class="results-tabs">
                 <button class="tab-button active" onclick="switchTab('signals')">信号记录</button>
                 <button class="tab-button" onclick="switchTab('orders')">交易记录</button>
@@ -485,6 +525,101 @@
                 } else {
                     console.log('拉取失败: ' + error.message, 'error');
                 }
+            }
+        }
+
+        // 导出信号记录为CSV
+        async function exportSignals() {
+            try {
+                const response = await fetch('/api/signals');
+                const signals = await response.json();
+
+                if (signals.length === 0) {
+                    alert('暂无信号记录可导出');
+                    return;
+                }
+
+                // CSV 表头
+                const headers = ['K线时间', '交易对', '影线类型', 'K线维度', '价格', '影/影比例', '主影/实体比例', '主影线长度', '平均成交量', 'K线类型'];
+
+                // 转换数据为CSV格式，对字符串字段添加引号
+                const csvContent = [
+                    headers.map(h => `"${h}"`).join(','),
+                    ...signals.map(signal => [
+                        `"${new Date(signal.timestamp * 1000).toLocaleString()}"`,
+                        `"${signal.symbol}"`,
+                        `"${signal.shadow_type}"`,
+                        `"${signal.interval_type}"`,
+                        signal.close_price,
+                        signal.shadow_ratio.toFixed(2),
+                        (signal.main_shadow_length / signal.body_length).toFixed(2),
+                        signal.main_shadow_length.toFixed(2),
+                        signal.avg_volume,
+                        `"${signal.candle_type}"`
+                    ].join(','))
+                ].join('\n');
+
+                // 创建并下载文件
+                const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `信号记录_${new Date().toISOString().slice(0, 10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                console.log('信号记录导出成功');
+            } catch (error) {
+                console.error('导出信号记录失败:', error);
+                alert('导出失败: ' + error.message);
+            }
+        }
+
+        // 导出交易记录为CSV
+        async function exportOrders() {
+            try {
+                const response = await fetch('/api/orders');
+                const orders = await response.json();
+
+                if (orders.length === 0) {
+                    alert('暂无交易记录可导出');
+                    return;
+                }
+
+                // CSV 表头
+                const headers = ['时间', '交易对', '类型', '数量', '价格', '止盈', '止损'];
+
+                // 转换数据为CSV格式，对字符串字段添加引号
+                const csvContent = [
+                    headers.map(h => `"${h}"`).join(','),
+                    ...orders.map(order => [
+                        `"${new Date(order.timestamp * 1000).toLocaleString()}"`,
+                        `"${order.symbol}"`,
+                        `"${order.side.toUpperCase()}"`,
+                        order.order_size,
+                        order.entry_price,
+                        order.take_profit_price,
+                        order.stop_loss_price
+                    ].join(','))
+                ].join('\n');
+
+                // 创建并下载文件
+                const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `交易记录_${new Date().toISOString().slice(0, 10)}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                console.log('交易记录导出成功');
+            } catch (error) {
+                console.error('导出交易记录失败:', error);
+                alert('导出失败: ' + error.message);
             }
         }
 

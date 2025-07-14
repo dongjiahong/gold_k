@@ -243,7 +243,7 @@ async fn get_signals(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 async fn get_orders(State(state): State<AppState>) -> impl IntoResponse {
-    match OrderRepository::get_recent(&state.db, 100).await {
+    match OrderRepository::get_recent(&state.db, 200).await {
         Ok(orders) => Json(orders).into_response(),
         Err(e) => {
             warn!("Failed to get orders: {}", e);
