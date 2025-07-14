@@ -1,7 +1,8 @@
 use std::env;
-use std::fs::OpenOptions;
+use std::path::Path;
 use time::{UtcOffset, macros::format_description};
 use tracing::level_filters::LevelFilter;
+use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{self, EnvFilter, fmt, fmt::time::OffsetTime};
@@ -24,19 +25,23 @@ pub fn init_tracing() {
 
     // 检查是否设置了 SERVER_LOG 环境变量
     if let Ok(log_file_path) = env::var("SERVER_LOG") {
-        // 创建或打开日志文件
-        let file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_file_path)
-            .unwrap_or_else(|e| panic!("无法打开日志文件 {}: {}", log_file_path, e));
+        // 解析日志文件路径，获取目录和文件名前缀
+        let log_path = Path::new(&log_file_path);
+        let log_dir = log_path.parent().unwrap_or_else(|| Path::new("logs"));
+        let file_name_prefix = log_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("app");
+
+        // 创建按日滚动的文件 appender
+        let file_appender = RollingFileAppender::new(Rotation::DAILY, log_dir, file_name_prefix);
 
         // 创建文件输出层
         let file_layer = fmt::layer()
             .with_timer(local_time)
             .with_line_number(true)
             .with_file(true)
-            .with_writer(file)
+            .with_writer(file_appender)
             .with_ansi(false); // 文件中不需要颜色代码
 
         // 同时输出到控制台和文件
@@ -46,7 +51,11 @@ pub fn init_tracing() {
             .with(file_layer)
             .init();
 
-        tracing::info!("日志将输出到控制台和文件: {}", log_file_path);
+        tracing::info!(
+            "日志将按天分隔输出到目录: {} (前缀: {})",
+            log_dir.display(),
+            file_name_prefix
+        );
     } else {
         // 只输出到控制台
         tracing_subscriber::registry()
