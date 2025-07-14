@@ -80,8 +80,8 @@ impl MonitorConfigRepository {
                     symbol, interval_type, frequency, history_hours, shadow_ratio,
                     main_shadow_body_ratio, volume_multiplier, order_size,
                     risk_reward_ratio, enable_auto_trading, enable_dingtalk,
-                    trade_direction, is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    long_k_long, short_k_short, trade_direction, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .bind(&config.symbol)
@@ -95,6 +95,8 @@ impl MonitorConfigRepository {
             .bind(config.risk_reward_ratio)
             .bind(config.enable_auto_trading)
             .bind(config.enable_dingtalk)
+            .bind(config.long_k_long)
+            .bind(config.short_k_short)
             .bind(&config.trade_direction)
             .bind(config.is_active)
             .execute(&mut *tx)

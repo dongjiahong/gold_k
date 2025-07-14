@@ -569,6 +569,7 @@
         // 更新配置
         function updateConfig(index, key, value) {
             configs[index][key] = value;
+            console.log(`Updated config ${index}: ${key} = ${value}`);
         }
 
         // 删除配置
@@ -586,6 +587,8 @@
                 showMessage(`错误: 以下交易对无效: ${symbols}`, 'error');
                 return;
             }
+
+            console.log('所有交易对均有效，开始保存配置', configs);
 
             try {
                 const response = await fetch('/api/configs', {
