@@ -73,6 +73,8 @@ pub struct MonitorConfig {
     pub risk_reward_ratio: f64, // 风险收益比
     pub enable_auto_trading: bool,
     pub enable_dingtalk: bool,
+    pub long_k_long: bool,       // 阳K才做多
+    pub short_k_short: bool,     // 阴K才做空
     pub trade_direction: String, // 'both', 'long', 'short'
     pub is_active: bool,
     pub created_at: Option<i64>,

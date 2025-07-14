@@ -272,6 +272,26 @@ impl MonitorService {
                 return Ok(());
             }
 
+            // 判断是否阳线做多或者阴线做空
+            if config.long_k_long {
+                if signal.candle_type != "bull" {
+                    warn!(
+                        "Signal filtered!! Long signal detected for {}: {}",
+                        config.symbol, signal.candle_type
+                    );
+                    return Ok(());
+                }
+            }
+            if config.short_k_short {
+                if signal.candle_type != "bear" {
+                    warn!(
+                        "Signal filtered!! Short signal detected for {}: {}",
+                        config.symbol, signal.candle_type
+                    );
+                    return Ok(());
+                }
+            }
+
             // 保存信号到数据库
             let signal_id = SignalRepository::save(db, &signal).await?;
 

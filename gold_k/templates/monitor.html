@@ -420,7 +420,7 @@
             const config = {
                 symbol: 'BTC_USDT',
                 interval_type: '15m',
-                frequency: 60,
+                frequency: 10,
                 history_hours: 3,
                 shadow_ratio: 4.5,
                 main_shadow_body_ratio: 1.0,
@@ -429,6 +429,8 @@
                 risk_reward_ratio: 1.2,
                 enable_auto_trading: false,
                 enable_dingtalk: false,
+                long_k_long: false, // 阳K才做多
+                short_k_short: false, // 阴K才做空
                 trade_direction: 'both',
                 is_active: true
             };
@@ -516,6 +518,16 @@
                             <div class="checkbox-group">
                                 <input type="checkbox" ${config.enable_dingtalk ? 'checked' : ''} onchange="updateConfig(${index}, 'enable_dingtalk', this.checked)">
                                 <label>启用钉钉通知</label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" ${config.long_k_long ? 'checked' : ''} onchange="updateConfig(${index}, 'long_k_long', this.checked)">
+                                <label>阳K才做多</label>
+                            </div>
+                            <div class="checkbox-group">
+                                <input type="checkbox" ${config.short_k_short ? 'checked' : ''} onchange="updateConfig(${index}, 'short_k_short', this.checked)">
+                                <label>阴K才做空</label>
                             </div>
                         </div>
                     </div>

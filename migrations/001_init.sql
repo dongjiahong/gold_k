@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS monitor_configs (
     risk_reward_ratio REAL NOT NULL DEFAULT 1.2, -- 风险收益比
     enable_auto_trading BOOLEAN NOT NULL DEFAULT 0, -- 是否启用自动交易
     enable_dingtalk BOOLEAN NOT NULL DEFAULT 0, -- 是否启用钉钉通知
+    long_k_long BOOLEAN NOT NULL DEFAULT 0, -- 阳K才做多
+    short_k_short BOOLEAN NOT NULL DEFAULT 0, -- 阴K才做空
     trade_direction TEXT NOT NULL DEFAULT 'both', -- 'both', 'long', 'short'
     is_active BOOLEAN NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
