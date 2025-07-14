@@ -427,11 +427,13 @@
                 volume_multiplier: 1.5,
                 order_size: 1.0,
                 risk_reward_ratio: 1.2,
+                expected_profit_rate: 0.1, // 预计收益率(%)
                 enable_auto_trading: false,
                 enable_dingtalk: false,
                 long_k_long: false, // 阳K才做多
                 short_k_short: false, // 阴K才做空
                 trade_direction: 'both',
+                order_type: 'market', // 下单方式：market(市价单)或limit(限价单)
                 is_active: true
             };
             configs.push(config);
@@ -503,11 +505,22 @@
                             <input type="number" step="0.1" min="0.1" value="${config.risk_reward_ratio}" onchange="updateConfig(${index}, 'risk_reward_ratio', parseFloat(this.value))">
                         </div>
                         <div class="form-group">
+                            <label>预计收益率(%)</label>
+                            <input type="number" step="0.005" min="0.01" value="${config.expected_profit_rate || 0.1}" onchange="updateConfig(${index}, 'expected_profit_rate', parseFloat(this.value))">
+                        </div>
+                        <div class="form-group">
                             <label>交易方向</label>
                             <select onchange="updateConfig(${index}, 'trade_direction', this.value)">
                                 <option value="both" ${config.trade_direction === 'both' ? 'selected' : ''}>双向</option>
                                 <option value="long" ${config.trade_direction === 'long' ? 'selected' : ''}>仅做多</option>
                                 <option value="short" ${config.trade_direction === 'short' ? 'selected' : ''}>仅做空</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>下单方式</label>
+                            <select onchange="updateConfig(${index}, 'order_type', this.value)">
+                                <option value="market" ${config.order_type === 'market' ? 'selected' : ''}>市价单</option>
+                                <option value="limit" ${config.order_type === 'limit' ? 'selected' : ''}>限价单</option>
                             </select>
                         </div>
                         <div class="form-group">

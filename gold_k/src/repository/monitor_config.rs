@@ -32,37 +32,6 @@ impl MonitorConfigRepository {
         Ok(())
     }
 
-    /// 保存监控配置
-    pub async fn save(pool: &SqlitePool, config: &MonitorConfig) -> Result<i64> {
-        let result = sqlx::query(
-            r#"
-            INSERT INTO monitor_configs (
-                symbol, interval_type, frequency, history_hours, shadow_ratio,
-                main_shadow_body_ratio, volume_multiplier, order_size,
-                risk_reward_ratio, enable_auto_trading, enable_dingtalk,
-                trade_direction, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            "#,
-        )
-        .bind(&config.symbol)
-        .bind(&config.interval_type)
-        .bind(config.frequency)
-        .bind(config.history_hours)
-        .bind(config.shadow_ratio)
-        .bind(config.main_shadow_body_ratio)
-        .bind(config.volume_multiplier)
-        .bind(config.order_size)
-        .bind(config.risk_reward_ratio)
-        .bind(config.enable_auto_trading)
-        .bind(config.enable_dingtalk)
-        .bind(&config.trade_direction)
-        .bind(config.is_active)
-        .execute(pool)
-        .await?;
-
-        Ok(result.last_insert_rowid())
-    }
-
     /// 批量保存监控配置（在事务中执行）
     pub async fn save_batch(pool: &SqlitePool, configs: &[MonitorConfig]) -> Result<()> {
         let mut tx = pool.begin().await?;
@@ -80,8 +49,9 @@ impl MonitorConfigRepository {
                     symbol, interval_type, frequency, history_hours, shadow_ratio,
                     main_shadow_body_ratio, volume_multiplier, order_size,
                     risk_reward_ratio, enable_auto_trading, enable_dingtalk,
-                    long_k_long, short_k_short, trade_direction, is_active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    long_k_long, short_k_short, trade_direction, is_active,
+                    order_type, expected_profit_rate
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#,
             )
             .bind(&config.symbol)
@@ -99,6 +69,8 @@ impl MonitorConfigRepository {
             .bind(config.short_k_short)
             .bind(&config.trade_direction)
             .bind(config.is_active)
+            .bind(&config.order_type)
+            .bind(config.expected_profit_rate)
             .execute(&mut *tx)
             .await?;
         }

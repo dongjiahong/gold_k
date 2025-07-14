@@ -292,6 +292,16 @@ impl MonitorService {
                 }
             }
 
+            // 利润释放够手续费
+            let expect_profit = signal.main_profit / last_kline.close * 100.0;
+            if expect_profit <= config.expected_profit_rate {
+                warn!(
+                    "Signal filtered!! Expected profit ({:.2}%) is below the threshold ({:.2}%) for {}",
+                    expect_profit, config.expected_profit_rate, config.symbol
+                );
+                return Ok(());
+            }
+
             // 保存信号到数据库
             let signal_id = SignalRepository::save(db, &signal).await?;
 
@@ -324,7 +334,7 @@ impl MonitorService {
                     {
                         let order_data = build_order_data(
                             &trading_signal.symbol,
-                            "market", // 使用市价单
+                            &config.order_type,
                             if trading_signal.signal_type == "long" {
                                 "buy"
                             } else {

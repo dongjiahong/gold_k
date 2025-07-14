@@ -61,11 +61,13 @@ CREATE TABLE IF NOT EXISTS monitor_configs (
     volume_multiplier REAL NOT NULL DEFAULT 1.5, -- 成交量倍数阈值
     order_size INTEGER NOT NULL DEFAULT 1.0, -- 下单数量
     risk_reward_ratio REAL NOT NULL DEFAULT 1.2, -- 风险收益比
+    expected_profit_rate REAL NOT NULL DEFAULT 0.1, -- 预计收益率(%)
     enable_auto_trading BOOLEAN NOT NULL DEFAULT 0, -- 是否启用自动交易
     enable_dingtalk BOOLEAN NOT NULL DEFAULT 0, -- 是否启用钉钉通知
     long_k_long BOOLEAN NOT NULL DEFAULT 0, -- 阳K才做多
     short_k_short BOOLEAN NOT NULL DEFAULT 0, -- 阴K才做空
     trade_direction TEXT NOT NULL DEFAULT 'both', -- 'both', 'long', 'short'
+    order_type TEXT NOT NULL DEFAULT 'market', -- 'market' 或 'limit'
     is_active BOOLEAN NOT NULL DEFAULT 1,
     created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
     updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))

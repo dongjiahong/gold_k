@@ -72,11 +72,13 @@ pub struct MonitorConfig {
     pub volume_multiplier: f64, // 成交量倍数
     pub order_size: i64,       // 张
     pub risk_reward_ratio: f64, // 风险收益比
+    pub expected_profit_rate: f64, // 预计收益率(%)
     pub enable_auto_trading: bool,
     pub enable_dingtalk: bool,
     pub long_k_long: bool,       // 阳K才做多
     pub short_k_short: bool,     // 阴K才做空
     pub trade_direction: String, // 'both', 'long', 'short'
+    pub order_type: String,      // 'market' 或 'limit'
     pub is_active: bool,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
