@@ -37,6 +37,7 @@ pub struct Signal {
     pub shadow_type: String, // 'upper' or 'lower'
     pub body_length: f64,
     pub main_shadow_length: f64,
+    #[sqlx(skip)]
     pub main_profit: f64,
     pub shadow_ratio: f64,
     pub volume_multiplier: f64,

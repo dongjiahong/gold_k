@@ -6,7 +6,7 @@ pub use dingtalk::DingTalkService;
 pub use gate::GateService;
 pub use monitor::MonitorService;
 
-fn build_order_data(
+pub fn build_order_data(
     symbol: &str,
     order_type: &str,
     side: &str,

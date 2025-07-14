@@ -13,6 +13,7 @@ use tokio::sync::RwLock;
 use tower::ServiceBuilder;
 use tower_http::{cors::CorsLayer, services::ServeDir};
 use tracing::{info, warn};
+use validator::Validate;
 
 use crate::repository::{
     ApiKeyRepository, MonitorConfigRepository, OrderRepository, SignalRepository,
@@ -78,6 +79,7 @@ pub async fn start() -> anyhow::Result<()> {
             get(get_monitor_configs).post(save_monitor_configs),
         )
         .route("/api/dingding/test", get(dingding_test))
+        .route("/api/order/place", post(place_order))
         .route("/keys", get(keys_page))
         .route("/monitor", get(monitor_page))
         .nest_service("/static", ServeDir::new("static"))
@@ -339,6 +341,53 @@ struct SaveApiKeysRequest {
     cookie: Option<String>,
 }
 
+#[derive(Deserialize, Validate)]
+struct PlaceOrderRequest {
+    #[validate(length(min = 1, message = "交易对不能为空"))]
+    symbol: String, // 交易对
+
+    #[validate(custom(
+        function = "validate_order_type",
+        message = "订单类型必须是 'market' 或 'limit'"
+    ))]
+    order_type: String, // 订单类型: "market" 或 "limit"
+
+    #[validate(custom(function = "validate_side", message = "交易方向必须是 'buy' 或 'sell'"))]
+    side: String, // 交易方向: "buy" 或 "sell"
+
+    #[validate(range(min = 0.0000001, message = "入场价格必须大于0"))]
+    entry_price: f64, // 入场价格
+
+    #[validate(range(min = 1, message = "下单大小必须大于0"))]
+    size: i64, // 下单大小
+
+    #[validate(range(min = 0.0000001, message = "止盈价格必须大于0"))]
+    take_profit: Option<f64>, // 止盈价格
+
+    #[validate(range(min = 0.0000001, message = "止损价格必须大于0"))]
+    stop_loss: Option<f64>, // 止损价格
+}
+
+fn validate_order_type(order_type: &str) -> Result<(), validator::ValidationError> {
+    if ["market", "limit"].contains(&order_type) {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(
+            "订单类型必须是 'market' 或 'limit'",
+        ))
+    }
+}
+
+fn validate_side(side: &str) -> Result<(), validator::ValidationError> {
+    if ["buy", "sell"].contains(&side) {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new(
+            "交易方向必须是 'buy' 或 'sell'",
+        ))
+    }
+}
+
 async fn dingding_test(State(state): State<AppState>) -> impl IntoResponse {
     // 获取当前活跃的API配置以获取webhook_url
     let current_key = match ApiKeyRepository::get_active(&state.db).await {
@@ -384,6 +433,70 @@ async fn dingding_test(State(state): State<AppState>) -> impl IntoResponse {
             Json(serde_json::json!({
                 "success": false,
                 "message": format!("钉钉机器人测试失败: {}", e)
+            }))
+            .into_response()
+        }
+    }
+}
+
+async fn place_order(
+    State(state): State<AppState>,
+    Json(request): Json<PlaceOrderRequest>,
+) -> impl IntoResponse {
+    // 使用validator验证参数
+    if let Err(errors) = request.validate() {
+        let error_messages: Vec<String> = errors
+            .field_errors()
+            .into_iter()
+            .flat_map(|(_, errors)| {
+                errors.iter().map(|error| {
+                    error
+                        .message
+                        .as_ref()
+                        .map(|msg| msg.to_string())
+                        .unwrap_or_else(|| "验证失败".to_string())
+                })
+            })
+            .collect();
+
+        return Json(serde_json::json!({
+            "success": false,
+            "message": error_messages.join(", ")
+        }))
+        .into_response();
+    }
+
+    // 构建订单数据
+    let order_data = build_order_data(
+        &request.symbol,
+        &request.order_type,
+        &request.side,
+        request.entry_price,
+        request.size,
+        request.take_profit,
+        request.stop_loss,
+    );
+
+    // 调用Gate服务下单
+    let gate_service = state.gate_service.read().await;
+    match gate_service
+        .place_order_with_stop_profit_loss(order_data, "usdt")
+        .await
+    {
+        Ok(response) => {
+            info!("Order placed successfully: {:?}", response);
+            Json(serde_json::json!({
+                "success": true,
+                "message": "下单成功",
+                "data": response
+            }))
+            .into_response()
+        }
+        Err(e) => {
+            warn!("Failed to place order: {}", e);
+            Json(serde_json::json!({
+                "success": false,
+                "message": format!("下单失败: {}", e)
             }))
             .into_response()
         }
