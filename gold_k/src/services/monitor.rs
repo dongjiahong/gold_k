@@ -14,7 +14,11 @@ use tracing::{debug, error, info, warn};
 
 // precision: "0.01" -> 2
 fn round_price(price: f64, precision: &str) -> f64 {
-    let decimal_places = precision.split('.').nth(1).map(|s| s.len()).unwrap_or(0);
+    let mut decimal_places = precision.split('.').nth(1).map(|s| s.len()).unwrap_or(0);
+    // 比官方少一位精度
+    if decimal_places > 0 {
+        decimal_places -= 1;
+    }
     let multiplier = 10_f64.powi(decimal_places as i32);
     (price * multiplier).round() / multiplier
 }
@@ -616,9 +620,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_round_price() {
-        assert_eq!(round_price(1.2345, "0.01"), 1.23);
-        assert_eq!(round_price(1.2345, "0.001"), 1.235);
-        assert_eq!(round_price(1.2345, "0.1"), 1.2);
+        assert_eq!(round_price(1.2345, "0.01"), 1.2);
+        assert_eq!(round_price(1.2545, "0.01"), 1.3);
+        assert_eq!(round_price(1.2345, "0.001"), 1.23);
+        assert_eq!(round_price(1.2345, "0.1"), 1.0);
         assert_eq!(round_price(1.2345, "1"), 1.0);
         assert_eq!(round_price(1.7345, "1"), 2.0);
         assert_eq!(round_price(1.5345, "1a"), 2.0);
