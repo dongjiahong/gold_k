@@ -22,7 +22,7 @@ pub struct Contract {
     pub name: String,              // 合约名称, BTC_USDT
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, Default)]
 pub struct Signal {
     pub id: i64,
     pub symbol: String,
@@ -60,7 +60,7 @@ pub struct Order {
     pub created_at: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, Default)]
 pub struct MonitorConfig {
     pub id: Option<i64>,
     pub symbol: String,

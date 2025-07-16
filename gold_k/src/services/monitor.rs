@@ -276,24 +276,18 @@ impl MonitorService {
                 return Ok(());
             }
 
-            // 判断是否阳线做多或者阴线做空
-            if config.long_k_long {
-                if signal.candle_type != "bull" {
-                    warn!(
-                        "Signal filtered!! Long signal detected for {}: {}",
-                        config.symbol, signal.candle_type
-                    );
-                    return Ok(());
-                }
-            }
-            if config.short_k_short {
-                if signal.candle_type != "bear" {
-                    warn!(
-                        "Signal filtered!! Short signal detected for {}: {}",
-                        config.symbol, signal.candle_type
-                    );
-                    return Ok(());
-                }
+            let should_place_order = place_order_by_long_short_config(config, &signal);
+
+            if !should_place_order {
+                warn!(
+                    "Signal filtered!! Candle type {} and Direction {} does not match configuration for {}: long_k_long={}, short_k_short={}",
+                    signal.candle_type,
+                    signal.shadow_type,
+                    config.symbol,
+                    config.long_k_long,
+                    config.short_k_short
+                );
+                return Ok(());
             }
 
             // 利润释放够手续费
@@ -614,6 +608,30 @@ impl MonitorService {
     }
 }
 
+pub fn place_order_by_long_short_config(config: &MonitorConfig, signal: &Signal) -> bool {
+    let should_place_order = if !config.long_k_long && !config.short_k_short {
+        // 两个都没配置，默认下订单
+        true
+    } else if config.long_k_long && config.short_k_short {
+        // 两个都配置了，满足其中一个条件就下订单
+        (config.long_k_long && signal.candle_type == "bull" && signal.shadow_type == "lower")
+            || (config.short_k_short
+                && signal.candle_type == "bear"
+                && signal.shadow_type == "upper")
+    } else if config.long_k_long {
+        // 只配置了long_k_long，只有阳线才下订单
+        (signal.shadow_type == "upper")
+            || (signal.candle_type == "bull" && signal.shadow_type == "lower")
+    } else if config.short_k_short {
+        // 只配置了short_k_short，只有阴线才下订单
+        (signal.shadow_type == "lower")
+            || (signal.candle_type == "bear" && signal.shadow_type == "upper")
+    } else {
+        false
+    };
+    return should_place_order;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -627,5 +645,69 @@ mod tests {
         assert_eq!(round_price(1.2345, "1"), 1.0);
         assert_eq!(round_price(1.7345, "1"), 2.0);
         assert_eq!(round_price(1.5345, "1a"), 2.0);
+    }
+
+    #[tokio::test]
+    async fn test_place_order_by_long_short_config() {
+        let signal1 = Signal {
+            candle_type: "bull".into(),
+            shadow_type: "lower".into(),
+            ..Default::default()
+        };
+        let signal2 = Signal {
+            candle_type: "bull".into(),
+            shadow_type: "upper".into(),
+            ..Default::default()
+        };
+        let signal3 = Signal {
+            candle_type: "bear".into(),
+            shadow_type: "lower".into(),
+            ..Default::default()
+        };
+        let signal4 = Signal {
+            candle_type: "bear".into(),
+            shadow_type: "upper".into(),
+            ..Default::default()
+        };
+        let config1 = MonitorConfig {
+            long_k_long: false,
+            short_k_short: false,
+            ..Default::default()
+        };
+        let config2 = MonitorConfig {
+            long_k_long: false,
+            short_k_short: true,
+            ..Default::default()
+        };
+        let config3 = MonitorConfig {
+            long_k_long: true,
+            short_k_short: false,
+            ..Default::default()
+        };
+        let config4 = MonitorConfig {
+            long_k_long: true,
+            short_k_short: true,
+            ..Default::default()
+        };
+        // 1
+        assert_eq!(place_order_by_long_short_config(&config1, &signal1), true);
+        assert_eq!(place_order_by_long_short_config(&config1, &signal2), true);
+        assert_eq!(place_order_by_long_short_config(&config1, &signal3), true);
+        assert_eq!(place_order_by_long_short_config(&config1, &signal4), true);
+        // 2
+        assert_eq!(place_order_by_long_short_config(&config2, &signal1), true);
+        assert_eq!(place_order_by_long_short_config(&config2, &signal2), false);
+        assert_eq!(place_order_by_long_short_config(&config2, &signal3), true);
+        assert_eq!(place_order_by_long_short_config(&config2, &signal4), true);
+        // 3
+        assert_eq!(place_order_by_long_short_config(&config3, &signal1), true);
+        assert_eq!(place_order_by_long_short_config(&config3, &signal2), true);
+        assert_eq!(place_order_by_long_short_config(&config3, &signal3), false);
+        assert_eq!(place_order_by_long_short_config(&config3, &signal4), true);
+        // 4
+        assert_eq!(place_order_by_long_short_config(&config4, &signal1), true);
+        assert_eq!(place_order_by_long_short_config(&config4, &signal2), false);
+        assert_eq!(place_order_by_long_short_config(&config4, &signal3), false);
+        assert_eq!(place_order_by_long_short_config(&config4, &signal4), true);
     }
 }
