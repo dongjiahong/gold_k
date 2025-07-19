@@ -75,6 +75,43 @@ impl MonitorService {
             "Monitor service started with {} active configurations",
             tasks.len()
         );
+
+        // 检查cookie是否有效
+        let gate_service = self.gate_service.clone();
+        let dingtalk_service = self.dingtalk_service.clone();
+        // 异步程序每隔5分钟调用一次get_account_info,以来检查是否cookie有效，如果无效就发送钉钉通知
+        tokio::spawn(async move {
+            info!("Starting cookie validity check with 5 minutes interval");
+            let mut interval = interval(Duration::from_secs(30));
+            loop {
+                interval.tick().await;
+
+                let gate_service = gate_service.read().await;
+                let dingtalk_service = dingtalk_service.read().await;
+                match gate_service.get_account_info().await {
+                    Ok(account_result) => {
+                        if !account_result.1 {
+                            warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
+                            let msg = account_result.0.to_string();
+                            if let Err(e) = dingtalk_service
+                                .send_text_message(
+                                    format!("K线监控：Cookie已失效，请重新登录, account: {}", msg)
+                                        .as_str(),
+                                )
+                                .await
+                            {
+                                error!("Failed to send DingTalk message: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to get account info: {}", e);
+                    }
+                }
+                info!("Finished cookie validity check");
+            }
+        });
+
         Ok(())
     }
 

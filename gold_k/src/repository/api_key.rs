@@ -51,6 +51,16 @@ impl ApiKeyRepository {
         Ok(contracts.into_iter().find(|c| c.name == symbol))
     }
 
+    /// 获取contracts
+    pub async fn get_contracts(pool: &SqlitePool) -> Result<Option<String>> {
+        let key = ApiKeyRepository::get_active(pool).await?;
+
+        if key.is_none() {
+            return Ok(None);
+        }
+        Ok(key.unwrap().contracts)
+    }
+
     /// 删除所有API密钥
     pub async fn delete_all(pool: &SqlitePool) -> Result<()> {
         sqlx::query("DELETE FROM api_keys").execute(pool).await?;
@@ -65,11 +75,12 @@ impl ApiKeyRepository {
         secret_key: &str,
         webhook_url: Option<&str>,
         cookie: Option<&str>,
+        contracts: Option<String>,
     ) -> Result<i64> {
         let result = sqlx::query(
             r#"
-            INSERT INTO api_keys (name, api_key, secret_key, webhook_url, cookie, is_active)
-            VALUES (?, ?, ?, ?, ?, 1)
+            INSERT INTO api_keys (name, api_key, secret_key, webhook_url, cookie, contracts, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
             "#,
         )
         .bind(name)
@@ -77,6 +88,7 @@ impl ApiKeyRepository {
         .bind(secret_key)
         .bind(webhook_url)
         .bind(cookie)
+        .bind(contracts)
         .execute(pool)
         .await?;
 

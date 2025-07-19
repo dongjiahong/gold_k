@@ -7,7 +7,7 @@ use serde_urlencoded;
 use sha2::{Digest, Sha512};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::debug;
+use tracing::{debug, warn};
 
 type HmacSha512 = Hmac<Sha512>;
 
@@ -390,6 +390,62 @@ impl GateService {
         Ok(result)
     }
 
+    /// 查询账户信息，同时也用来判断cookie是否过期
+    pub async fn get_account_info(&self) -> Result<(Value, bool)> {
+        let url = "https://www.gate.com/apiw/v2/futures/usdt/accounts".to_string();
+        // 检查是否有cookie和contracts（作为CSRF token）
+        let cookie_string = self
+            .cookie
+            .as_ref()
+            .ok_or_else(|| anyhow!("Cookie未设置，请确保已在gate.com上登录"))?;
+
+        let csrf_token = self.set_web_credentials()?;
+
+        debug!("CSRF Token: {}", csrf_token);
+        debug!("cookie: {}", cookie_string);
+        debug!("Request URL: {}", url);
+
+        let response = self
+            .client
+            .get(&url)
+            .header("Cache-control", "no-cache")
+            .header("Accept-Encoding", "gzip, deflate, br, zstd") // 这条一定要有
+            .header("Accept-Language", "zh-CN,zh;q=0.9")
+            .header("Csrftoken", csrf_token)
+            .header("Cookie", cookie_string)
+            .header("Accept", "application/json, text/plain, */*")
+            .header("Referer", "https://www.gate.com/zh/futures/USDT/ETH_USDT")
+            .header("Sec-Ch-Ua", "\"Not)A;Brand\";v=\"8\", \"Chromium\";v=\"138\", \"Google Chrome\";v=\"138\"")
+            .header("Sec-Ch-Ua-Mobile", "?0")
+            .header("Sec-Ch-Ua-Platform", "macOS")
+            .header("Sec-Fetch-Dest", "empty")
+            .header("Sec-Fetch-Mode", "cors")
+            .header("Sec-Fetch-Site", "same-origin")
+            .header(
+                "User-Agent",
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            )
+            .send()
+            .await?;
+
+        let status = response.status();
+        let response_text = response.text().await?;
+
+        if !status.is_success() {
+            return Err(anyhow!("API请求失败: {} - {}", status, response_text));
+        }
+
+        let result: Value = serde_json::from_str(&response_text)?;
+        // result.message 包含"not authenticated"
+        if let Some(label) = result.get("label").and_then(|m| m.as_str()) {
+            if label.contains("INVALID_CREDENTIALS") || label.contains("Login_Session_Expired") {
+                warn!("账户cookie信息无效或会话已过期");
+                return Ok((result, false));
+            }
+        }
+        Ok((result, true))
+    }
+
     /// 设置从浏览器获取的完整cookie字符串和CSRF token
     pub fn set_web_credentials(&self) -> Result<String> {
         // 从cookie中提取CSRF token
@@ -406,5 +462,23 @@ impl GateService {
             }
         }
         return Err(anyhow!("无法从cookie中提取CSRF Token"));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing::info;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_get_account_info() {
+        utils::log::init_tracing();
+        let mut gate = GateService::new();
+        gate.set_cookie("csrftoken=1");
+        let result = gate.get_account_info().await;
+        info!("Account info: {:?}", result);
+        assert!(result.is_ok());
+        assert!(!result.unwrap().1);
     }
 }

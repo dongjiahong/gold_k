@@ -125,6 +125,10 @@ async fn save_api_keys(
     State(state): State<AppState>,
     Json(payload): Json<SaveApiKeysRequest>,
 ) -> impl IntoResponse {
+    // 保存contracts
+    let contracts = ApiKeyRepository::get_contracts(&state.db)
+        .await
+        .unwrap_or_default();
     // 先删除所有现有配置
     if let Err(e) = ApiKeyRepository::delete_all(&state.db).await {
         warn!("Failed to clear api keys: {}", e);
@@ -139,6 +143,7 @@ async fn save_api_keys(
         &payload.secret_key,
         payload.webhook_url.as_deref(),
         payload.cookie.as_deref(),
+        contracts,
     )
     .await
     {
