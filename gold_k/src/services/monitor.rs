@@ -95,7 +95,7 @@ impl MonitorService {
             loop {
                 tokio::select! {
                     _ = cookie_check_interval.tick() => {
-                        info!("Checking cookie validity");
+                        info!("🪛Checking cookie validity");
                         // Cookie有效性检查
                         let gate_service = gate_service.read().await;
                         let dingtalk_service = dingtalk_service.read().await;
@@ -136,7 +136,7 @@ impl MonitorService {
                         info!("Finished cookie validity check");
                     }
                     _ = config_check_interval.tick() => {
-                        info!("Checking for config updates");
+                        info!("🔧Checking for config updates");
                         // 配置更新检查
                         if let Err(e) = Self::check_and_update_config(
                             &db_clone,
