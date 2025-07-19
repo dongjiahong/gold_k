@@ -155,10 +155,10 @@ impl MonitorService {
                             
                             match check_result {
                                 Ok(_) => {
-                                    info!("Finished cookie validity check");
+                                    info!("🪛CFinished cookie validity check");
                                 }
                                 Err(_) => {
-                                    error!("Cookie validity check timed out after 60 seconds");
+                                    error!("🪛CCookie validity check timed out after 60 seconds");
                                 }
                             }
                         }
@@ -177,13 +177,13 @@ impl MonitorService {
                             
                             match config_result {
                                 Ok(Ok(_)) => {
-                                    info!("Finished config update check");
+                                    info!("🔧CFinished config update check");
                                 }
                                 Ok(Err(e)) => {
-                                    error!("Failed to check/update config: {}", e);
+                                    error!("🔧CFailed to check/update config: {}", e);
                                 }
                                 Err(_) => {
-                                    error!("Config update check timed out after 30 seconds");
+                                    error!("🔧CConfig update check timed out after 30 seconds");
                                 }
                             }
                         }
