@@ -91,64 +91,116 @@ impl MonitorService {
             info!("Starting cookie validity check and config update check");
             let mut cookie_check_interval = interval(Duration::from_secs(300)); // 5分钟检查cookie
             let mut config_check_interval = interval(Duration::from_secs(30)); // 30秒检查配置
+            let mut heartbeat_interval = interval(Duration::from_secs(60)); // 1分钟心跳日志
 
             loop {
-                tokio::select! {
-                    _ = cookie_check_interval.tick() => {
-                        info!("🪛Checking cookie validity");
-                        // Cookie有效性检查
-                        let gate_service = gate_service.read().await;
-                        let dingtalk_service = dingtalk_service.read().await;
-                        match gate_service.get_account_info().await {
-                            Ok(account_result) => {
-                                if !account_result.1 {
-                                    warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
-                                    let msg = account_result.0.to_string();
-                                    if let Err(e) = dingtalk_service
-                                        .send_text_message(
-                                            format!("K线监控：Cookie已失效，请重新登录, account: {}", msg)
-                                                .as_str(),
-                                        )
-                                        .await
-                                    {
-                                        error!("Failed to send DingTalk message: {}", e);
+                // 添加全局异常处理，确保任何未处理的错误不会导致整个监控循环停止
+                let loop_result = tokio::time::timeout(Duration::from_secs(120), async {
+                    tokio::select! {
+                        _ = heartbeat_interval.tick() => {
+                            info!("💓Monitor loop heartbeat - still running");
+                        }
+                        _ = cookie_check_interval.tick() => {
+                            info!("🪛Checking cookie validity");
+                            
+                            // 使用 tokio::time::timeout 包装整个cookie检查过程，防止卡住
+                            let check_result = tokio::time::timeout(Duration::from_secs(60), async {
+                                // Cookie有效性检查 - 分别获取锁并立即释放
+                                let account_result = {
+                                    let gate_service = gate_service.read().await;
+                                    gate_service.get_account_info().await
+                                }; // gate_service 锁在这里自动释放
+                                
+                                match account_result {
+                                    Ok(account_result) => {
+                                        if !account_result.1 {
+                                            warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
+                                            let msg = account_result.0.to_string();
+                                            
+                                            // 分别获取钉钉服务锁
+                                            let send_result = {
+                                                let dingtalk_service = dingtalk_service.read().await;
+                                                dingtalk_service.send_text_message(
+                                                    format!("K线监控：Cookie已失效，请重新登录, account: {}", msg).as_str()
+                                                ).await
+                                            }; // dingtalk_service 锁在这里自动释放
+                                            
+                                            if let Err(e) = send_result {
+                                                error!("Failed to send DingTalk message: {}", e);
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        // 如果e中包含403 Forbidden，则认为Cookie已失效
+                                        if e.to_string().contains("403 Forbidden") {
+                                            error!("Cookie已失效，或者ip不对，用国内ip, account: {:?}", e);
+                                            
+                                            // 分别获取钉钉服务锁
+                                            let send_result = {
+                                                let dingtalk_service = dingtalk_service.read().await;
+                                                dingtalk_service.send_text_message(
+                                                    "K线监控：Cookie已失效，或者ip不对，请检测"
+                                                ).await
+                                            }; // dingtalk_service 锁在这里自动释放
+                                            
+                                            if let Err(e) = send_result {
+                                                error!("Failed to send DingTalk message: {}", e);
+                                            }
+                                        } else {
+                                            error!("Failed to get account info: {}", e);
+                                        }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                // 如果e中包含403 Forbidden，则认为Cookie已失效
-                                if e.to_string().contains("403 Forbidden") {
-                                    error!("Cookie已失效，或者ip不对，用国内ip, account: {:?}",e);
-                                    if let Err(e) = dingtalk_service
-                                        .send_text_message(
-                                            format!("K线监控：Cookie已失效，或者ip不对，请检测")
-                                                .as_str(),
-                                        )
-                                        .await
-                                    {
-                                        error!("Failed to send DingTalk message: {}", e);
-                                    }
-                                } else {
-                                    error!("Failed to get account info: {}", e);
+                            }).await;
+                            
+                            match check_result {
+                                Ok(_) => {
+                                    info!("Finished cookie validity check");
+                                }
+                                Err(_) => {
+                                    error!("Cookie validity check timed out after 60 seconds");
                                 }
                             }
                         }
-                        info!("Finished cookie validity check");
+                        _ = config_check_interval.tick() => {
+                            info!("🔧Checking for config updates");
+                            
+                            // 使用 tokio::time::timeout 包装配置检查过程，防止卡住
+                            let config_result = tokio::time::timeout(Duration::from_secs(30), async {
+                                Self::check_and_update_config(
+                                    &db_clone,
+                                    &gate_service,
+                                    &dingtalk_service,
+                                    &last_config_update
+                                ).await
+                            }).await;
+                            
+                            match config_result {
+                                Ok(Ok(_)) => {
+                                    info!("Finished config update check");
+                                }
+                                Ok(Err(e)) => {
+                                    error!("Failed to check/update config: {}", e);
+                                }
+                                Err(_) => {
+                                    error!("Config update check timed out after 30 seconds");
+                                }
+                            }
+                        }
                     }
-                    _ = config_check_interval.tick() => {
-                        info!("🔧Checking for config updates");
-                        // 配置更新检查
-                        if let Err(e) = Self::check_and_update_config(
-                            &db_clone,
-                            &gate_service,
-                            &dingtalk_service,
-                            &last_config_update
-                        ).await {
-                            error!("Failed to check/update config: {}", e);
-                        }
-                        info!("Finished config update check");
+                }).await;
+
+                match loop_result {
+                    Ok(_) => {
+                        // 正常完成一轮检查
+                    }
+                    Err(_) => {
+                        error!("Monitor loop iteration timed out after 120 seconds, continuing...");
                     }
                 }
+
+                // 添加小延时，防止CPU占用过高
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         });
 
