@@ -116,7 +116,21 @@ impl MonitorService {
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to get account info: {}", e);
+                                // 如果e中包含403 Forbidden，则认为Cookie已失效
+                                if e.to_string().contains("403 Forbidden") {
+                                    error!("Cookie已失效，或者ip不对，用国内ip, account: {:?}",e);
+                                    if let Err(e) = dingtalk_service
+                                        .send_text_message(
+                                            format!("K线监控：Cookie已失效，或者ip不对，请检测")
+                                                .as_str(),
+                                        )
+                                        .await
+                                    {
+                                        error!("Failed to send DingTalk message: {}", e);
+                                    }
+                                } else {
+                                    error!("Failed to get account info: {}", e);
+                                }
                             }
                         }
                         info!("Finished cookie validity check");
