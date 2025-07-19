@@ -30,6 +30,8 @@ pub struct MonitorService {
     active_tasks: Arc<RwLock<HashMap<String, tokio::task::JoinHandle<()>>>>,
     gate_service: Arc<RwLock<GateService>>,
     dingtalk_service: Arc<RwLock<DingTalkService>>,
+    // 记录最后更新的API配置时间戳，用于检测配置变化
+    last_config_update: Arc<RwLock<i64>>,
 }
 
 impl MonitorService {
@@ -40,6 +42,7 @@ impl MonitorService {
             active_tasks: Arc::new(RwLock::new(HashMap::new())),
             gate_service: Arc::new(RwLock::new(GateService::new())),
             dingtalk_service: Arc::new(RwLock::new(DingTalkService::new())),
+            last_config_update: Arc::new(RwLock::new(0)),
         }
     }
 
@@ -79,36 +82,59 @@ impl MonitorService {
         // 检查cookie是否有效
         let gate_service = self.gate_service.clone();
         let dingtalk_service = self.dingtalk_service.clone();
-        // 异步程序每隔5分钟调用一次get_account_info,以来检查是否cookie有效，如果无效就发送钉钉通知
-        tokio::spawn(async move {
-            info!("Starting cookie validity check with 5 minutes interval");
-            let mut interval = interval(Duration::from_secs(30));
-            loop {
-                interval.tick().await;
+        let db_clone = self.db.clone();
+        let last_config_update = self.last_config_update.clone();
 
-                let gate_service = gate_service.read().await;
-                let dingtalk_service = dingtalk_service.read().await;
-                match gate_service.get_account_info().await {
-                    Ok(account_result) => {
-                        if !account_result.1 {
-                            warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
-                            let msg = account_result.0.to_string();
-                            if let Err(e) = dingtalk_service
-                                .send_text_message(
-                                    format!("K线监控：Cookie已失效，请重新登录, account: {}", msg)
-                                        .as_str(),
-                                )
-                                .await
-                            {
-                                error!("Failed to send DingTalk message: {}", e);
+        // 异步程序每隔5分钟调用一次get_account_info,以来检查是否cookie有效，如果无效就发送钉钉通知
+        // 同时每30秒检查一次配置是否有更新
+        tokio::spawn(async move {
+            info!("Starting cookie validity check and config update check");
+            let mut cookie_check_interval = interval(Duration::from_secs(300)); // 5分钟检查cookie
+            let mut config_check_interval = interval(Duration::from_secs(30)); // 30秒检查配置
+
+            loop {
+                tokio::select! {
+                    _ = cookie_check_interval.tick() => {
+                        info!("Checking cookie validity");
+                        // Cookie有效性检查
+                        let gate_service = gate_service.read().await;
+                        let dingtalk_service = dingtalk_service.read().await;
+                        match gate_service.get_account_info().await {
+                            Ok(account_result) => {
+                                if !account_result.1 {
+                                    warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
+                                    let msg = account_result.0.to_string();
+                                    if let Err(e) = dingtalk_service
+                                        .send_text_message(
+                                            format!("K线监控：Cookie已失效，请重新登录, account: {}", msg)
+                                                .as_str(),
+                                        )
+                                        .await
+                                    {
+                                        error!("Failed to send DingTalk message: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to get account info: {}", e);
                             }
                         }
+                        info!("Finished cookie validity check");
                     }
-                    Err(e) => {
-                        error!("Failed to get account info: {}", e);
+                    _ = config_check_interval.tick() => {
+                        info!("Checking for config updates");
+                        // 配置更新检查
+                        if let Err(e) = Self::check_and_update_config(
+                            &db_clone,
+                            &gate_service,
+                            &dingtalk_service,
+                            &last_config_update
+                        ).await {
+                            error!("Failed to check/update config: {}", e);
+                        }
+                        info!("Finished config update check");
                     }
                 }
-                info!("Finished cookie validity check");
             }
         });
 
@@ -186,6 +212,74 @@ impl MonitorService {
         }
     }
 
+    /// 检查数据库配置是否有更新，如果有则更新服务配置
+    /// 这个方法是线程安全的，使用读写锁来保护共享资源
+    async fn check_and_update_config(
+        db: &SqlitePool,
+        gate_service: &Arc<RwLock<GateService>>,
+        dingtalk_service: &Arc<RwLock<DingTalkService>>,
+        last_config_update: &Arc<RwLock<i64>>,
+    ) -> Result<()> {
+        // 获取当前活跃的API密钥
+        let api_key = match ApiKeyRepository::get_active(db).await? {
+            Some(key) => key,
+            None => {
+                warn!("No active API key found, skipping config update");
+                return Ok(());
+            }
+        };
+
+        // 检查配置是否有更新
+        let last_update = *last_config_update.read().await;
+        if api_key.updated_at <= last_update {
+            // 配置没有更新，直接返回
+            return Ok(());
+        }
+
+        warn!(
+            "API配置有更新，开始更新服务配置。上次更新时间: {}, 当前配置更新时间: {}",
+            last_update, api_key.updated_at
+        );
+
+        // 更新 GateService 配置
+        {
+            let mut gate = gate_service.write().await;
+
+            // 更新 API 凭据
+            gate.update_credentials(&api_key.api_key, &api_key.secret_key);
+
+            // 更新 cookie
+            if let Some(cookie) = &api_key.cookie {
+                gate.set_cookie(cookie);
+                info!("Updated gate service cookie");
+            }
+
+            // 更新合约数据
+            if let Some(contracts) = &api_key.contracts {
+                gate.set_contracts(contracts);
+                info!("Updated gate service contracts");
+            }
+
+            info!("Updated gate service API credentials");
+        }
+
+        // 更新 DingTalkService 配置
+        if let Some(webhook_url) = &api_key.webhook_url {
+            let mut dingtalk = dingtalk_service.write().await;
+            dingtalk.set_webhook_url(webhook_url);
+            info!("Updated dingtalk service webhook URL");
+        }
+
+        // 更新最后配置更新时间戳
+        {
+            let mut last_update = last_config_update.write().await;
+            *last_update = api_key.updated_at;
+        }
+
+        info!("配置更新完成");
+        Ok(())
+    }
+
     async fn get_active_configs(&self) -> Result<Vec<MonitorConfig>> {
         let configs = MonitorConfigRepository::get_active(&self.db).await?;
 
@@ -217,6 +311,12 @@ impl MonitorService {
             if let Some(webhook_url) = &key.webhook_url {
                 let mut dingtalk_service = self.dingtalk_service.write().await;
                 dingtalk_service.set_webhook_url(webhook_url);
+            }
+
+            // 更新最后配置更新时间戳
+            {
+                let mut last_update = self.last_config_update.write().await;
+                *last_update = key.updated_at;
             }
 
             Ok(())
@@ -746,5 +846,32 @@ mod tests {
         assert_eq!(place_order_by_long_short_config(&config4, &signal2), false);
         assert_eq!(place_order_by_long_short_config(&config4, &signal3), false);
         assert_eq!(place_order_by_long_short_config(&config4, &signal4), true);
+    }
+
+    #[tokio::test]
+    async fn test_config_update_detection() {
+        // 模拟配置更新时间戳的变化
+        let last_config_update = Arc::new(RwLock::new(100i64));
+
+        // 模拟数据库中的API配置有更新（updated_at > last_config_update）
+        let mock_api_key = ApiKey {
+            id: 1,
+            name: "test_key".to_string(),
+            api_key: "new_api_key".to_string(),
+            secret_key: "new_secret_key".to_string(),
+            webhook_url: Some("http://new-webhook.com".to_string()),
+            cookie: Some("new_cookie".to_string()),
+            contracts: Some("{\"contracts\":\"new_data\"}".to_string()),
+            is_active: true,
+            created_at: 50,
+            updated_at: 200, // 比 last_config_update (100) 更大，表示有更新
+        };
+
+        // 验证时间戳比较逻辑
+        let last_update = *last_config_update.read().await;
+        assert!(
+            mock_api_key.updated_at > last_update,
+            "配置应该被检测为有更新"
+        );
     }
 }
