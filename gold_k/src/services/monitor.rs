@@ -87,78 +87,122 @@ impl MonitorService {
 
         // 异步程序每隔5分钟调用一次get_account_info,以来检查是否cookie有效，如果无效就发送钉钉通知
         // 同时每30秒检查一次配置是否有更新
+        // 每2分钟检查一次任务健康状态
         tokio::spawn(async move {
             info!("Starting cookie validity check and config update check");
             let mut cookie_check_interval = interval(Duration::from_secs(300)); // 5分钟检查cookie
             let mut config_check_interval = interval(Duration::from_secs(30)); // 30秒检查配置
-            let mut heartbeat_interval = interval(Duration::from_secs(60)); // 1分钟心跳日志
+            let mut health_check_interval = interval(Duration::from_secs(120)); // 2分钟健康检查
 
             loop {
                 // 添加全局异常处理，确保任何未处理的错误不会导致整个监控循环停止
                 let loop_result = tokio::time::timeout(Duration::from_secs(120), async {
                     tokio::select! {
-                        _ = heartbeat_interval.tick() => {
-                            info!("💓Monitor loop heartbeat - still running");
+                        _ = health_check_interval.tick() => {
+                            info!("🏥Checking task health status");
+                            
                         }
                         _ = cookie_check_interval.tick() => {
                             info!("🪛Checking cookie validity");
                             
                             // 使用 tokio::time::timeout 包装整个cookie检查过程，防止卡住
                             let check_result = tokio::time::timeout(Duration::from_secs(60), async {
-                                // Cookie有效性检查 - 分别获取锁并立即释放
+                                // Cookie有效性检查 - 使用快速释放锁的模式
                                 let account_result = {
-                                    let gate_service = gate_service.read().await;
-                                    gate_service.get_account_info().await
+                                    let gate_lock_result = tokio::time::timeout(
+                                        Duration::from_secs(10),
+                                        gate_service.read()
+                                    ).await;
+                                    
+                                    match gate_lock_result {
+                                        Ok(gate_service) => {
+                                            tokio::time::timeout(
+                                                Duration::from_secs(30),
+                                                gate_service.get_account_info()
+                                            ).await
+                                        }
+                                        Err(_) => {
+                                            error!("Timeout waiting for gate service lock during cookie check");
+                                            return Err(anyhow!("Gate service lock timeout"));
+                                        }
+                                    }
                                 }; // gate_service 锁在这里自动释放
                                 
                                 match account_result {
-                                    Ok(account_result) => {
+                                    Ok(Ok(account_result)) => {
                                         if !account_result.1 {
                                             warn!("Cookie已失效，请重新登录, account: {:?}", account_result);
                                             let msg = account_result.0.to_string();
                                             
-                                            // 分别获取钉钉服务锁
-                                            let send_result = {
-                                                let dingtalk_service = dingtalk_service.read().await;
-                                                dingtalk_service.send_text_message(
-                                                    format!("K线监控：Cookie已失效，请重新登录, account: {}", msg).as_str()
-                                                ).await
-                                            }; // dingtalk_service 锁在这里自动释放
+                                            // 分别获取钉钉服务锁 - 使用快速释放锁的模式
+                                            let send_result = tokio::time::timeout(
+                                                Duration::from_secs(10),
+                                                async {
+                                                    let dingtalk_service = dingtalk_service.read().await;
+                                                    dingtalk_service.send_text_message(
+                                                        format!("K线监控：Cookie已失效，请重新登录, account: {}", msg).as_str()
+                                                    ).await
+                                                }
+                                            ).await; // dingtalk_service 锁在这里自动释放
                                             
-                                            if let Err(e) = send_result {
-                                                error!("Failed to send DingTalk message: {}", e);
+                                            match send_result {
+                                                Ok(Ok(_)) => {
+                                                    info!("Cookie invalidity notification sent successfully");
+                                                }
+                                                Ok(Err(e)) => {
+                                                    error!("Failed to send DingTalk message: {}", e);
+                                                }
+                                                Err(_) => {
+                                                    error!("Timeout sending DingTalk notification");
+                                                }
                                             }
                                         }
                                     }
-                                    Err(e) => {
+                                    Ok(Err(e)) => {
                                         // 如果e中包含403 Forbidden，则认为Cookie已失效
                                         if e.to_string().contains("403 Forbidden") {
                                             error!("Cookie已失效，或者ip不对，用国内ip, account: {:?}", e);
                                             
-                                            // 分别获取钉钉服务锁
-                                            let send_result = {
-                                                let dingtalk_service = dingtalk_service.read().await;
-                                                dingtalk_service.send_text_message(
-                                                    "K线监控：Cookie已失效，或者ip不对，请检测"
-                                                ).await
-                                            }; // dingtalk_service 锁在这里自动释放
+                                            // 分别获取钉钉服务锁 - 使用快速释放锁的模式
+                                            let send_result = tokio::time::timeout(
+                                                Duration::from_secs(10),
+                                                async {
+                                                    let dingtalk_service = dingtalk_service.read().await;
+                                                    dingtalk_service.send_text_message(
+                                                        "K线监控：Cookie已失效，或者ip不对，请检测"
+                                                    ).await
+                                                }
+                                            ).await; // dingtalk_service 锁在这里自动释放
                                             
-                                            if let Err(e) = send_result {
-                                                error!("Failed to send DingTalk message: {}", e);
+                                            match send_result {
+                                                Ok(Ok(_)) => {
+                                                    info!("403 error notification sent successfully");
+                                                }
+                                                Ok(Err(e)) => {
+                                                    error!("Failed to send DingTalk message: {}", e);
+                                                }
+                                                Err(_) => {
+                                                    error!("Timeout sending DingTalk notification for 403 error");
+                                                }
                                             }
                                         } else {
                                             error!("Failed to get account info: {}", e);
                                         }
                                     }
+                                    Err(_) => {
+                                        error!("Timeout getting account info during cookie check");
+                                    }
                                 }
+                                
+                                Ok(())
                             }).await;
                             
                             match check_result {
                                 Ok(_) => {
-                                    info!("🪛CFinished cookie validity check");
+                                    info!("🪛Finished cookie validity check");
                                 }
                                 Err(_) => {
-                                    error!("🪛CCookie validity check timed out after 60 seconds");
+                                    error!("🪛Cookie validity check timed out after 60 seconds");
                                 }
                             }
                         }
@@ -307,40 +351,75 @@ impl MonitorService {
             last_update, api_key.updated_at
         );
 
-        // 更新 GateService 配置
+        // 更新 GateService 配置 - 使用超时和快速释放锁
         {
-            let mut gate = gate_service.write().await;
+            let gate_lock_result = tokio::time::timeout(
+                Duration::from_secs(10),
+                gate_service.write()
+            ).await;
+            
+            match gate_lock_result {
+                Ok(mut gate) => {
+                    // 更新 API 凭据
+                    gate.update_credentials(&api_key.api_key, &api_key.secret_key);
 
-            // 更新 API 凭据
-            gate.update_credentials(&api_key.api_key, &api_key.secret_key);
+                    // 更新 cookie
+                    if let Some(cookie) = &api_key.cookie {
+                        gate.set_cookie(cookie);
+                        info!("Updated gate service cookie");
+                    }
 
-            // 更新 cookie
-            if let Some(cookie) = &api_key.cookie {
-                gate.set_cookie(cookie);
-                info!("Updated gate service cookie");
+                    // 更新合约数据
+                    if let Some(contracts) = &api_key.contracts {
+                        gate.set_contracts(contracts);
+                        info!("Updated gate service contracts");
+                    }
+
+                    info!("Updated gate service API credentials");
+                }
+                Err(_) => {
+                    error!("Timeout waiting for gate service write lock during config update");
+                    return Err(anyhow!("Gate service write lock timeout"));
+                }
             }
+        } // gate 写锁在这里自动释放
 
-            // 更新合约数据
-            if let Some(contracts) = &api_key.contracts {
-                gate.set_contracts(contracts);
-                info!("Updated gate service contracts");
-            }
-
-            info!("Updated gate service API credentials");
-        }
-
-        // 更新 DingTalkService 配置
+        // 更新 DingTalkService 配置 - 使用超时和快速释放锁
         if let Some(webhook_url) = &api_key.webhook_url {
-            let mut dingtalk = dingtalk_service.write().await;
-            dingtalk.set_webhook_url(webhook_url);
-            info!("Updated dingtalk service webhook URL");
-        }
+            let dingtalk_lock_result = tokio::time::timeout(
+                Duration::from_secs(5),
+                dingtalk_service.write()
+            ).await;
+            
+            match dingtalk_lock_result {
+                Ok(mut dingtalk) => {
+                    dingtalk.set_webhook_url(webhook_url);
+                    info!("Updated dingtalk service webhook URL");
+                }
+                Err(_) => {
+                    error!("Timeout waiting for dingtalk service write lock during config update");
+                    return Err(anyhow!("DingTalk service write lock timeout"));
+                }
+            }
+        } // dingtalk 写锁在这里自动释放
 
-        // 更新最后配置更新时间戳
+        // 更新最后配置更新时间戳 - 使用超时
         {
-            let mut last_update = last_config_update.write().await;
-            *last_update = api_key.updated_at;
-        }
+            let last_update_lock_result = tokio::time::timeout(
+                Duration::from_secs(5),
+                last_config_update.write()
+            ).await;
+            
+            match last_update_lock_result {
+                Ok(mut last_update) => {
+                    *last_update = api_key.updated_at;
+                }
+                Err(_) => {
+                    error!("Timeout waiting for config update timestamp write lock");
+                    return Err(anyhow!("Config update timestamp write lock timeout"));
+                }
+            }
+        } // last_update 写锁在这里自动释放
 
         info!("配置更新完成");
         Ok(())
@@ -357,33 +436,69 @@ impl MonitorService {
         let api_key = ApiKeyRepository::get_active(&self.db).await?;
 
         if let Some(key) = api_key {
-            // 更新Gate服务配置
+            // 更新Gate服务配置 - 使用超时和快速释放锁
             {
-                let mut gate_service = self.gate_service.write().await;
-                gate_service.update_credentials(&key.api_key, &key.secret_key);
+                let gate_lock_result = tokio::time::timeout(
+                    Duration::from_secs(10),
+                    self.gate_service.write()
+                ).await;
+                
+                match gate_lock_result {
+                    Ok(mut gate_service) => {
+                        gate_service.update_credentials(&key.api_key, &key.secret_key);
 
-                // 更新cookie
-                if let Some(cookie) = &key.cookie {
-                    gate_service.set_cookie(cookie);
+                        // 更新cookie
+                        if let Some(cookie) = &key.cookie {
+                            gate_service.set_cookie(cookie);
+                        }
+
+                        // 更新合约数据
+                        if let Some(contracts) = &key.contracts {
+                            gate_service.set_contracts(contracts);
+                        }
+                    }
+                    Err(_) => {
+                        error!("Timeout waiting for gate service write lock during service update");
+                        return Err(anyhow!("Gate service write lock timeout during startup"));
+                    }
                 }
+            } // gate_service 写锁在这里自动释放
 
-                // 更新合约数据
-                if let Some(contracts) = &key.contracts {
-                    gate_service.set_contracts(contracts);
-                }
-            }
-
-            // 更新钉钉服务配置
+            // 更新钉钉服务配置 - 使用超时和快速释放锁
             if let Some(webhook_url) = &key.webhook_url {
-                let mut dingtalk_service = self.dingtalk_service.write().await;
-                dingtalk_service.set_webhook_url(webhook_url);
-            }
+                let dingtalk_lock_result = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    self.dingtalk_service.write()
+                ).await;
+                
+                match dingtalk_lock_result {
+                    Ok(mut dingtalk_service) => {
+                        dingtalk_service.set_webhook_url(webhook_url);
+                    }
+                    Err(_) => {
+                        error!("Timeout waiting for dingtalk service write lock during service update");
+                        return Err(anyhow!("DingTalk service write lock timeout during startup"));
+                    }
+                }
+            } // dingtalk_service 写锁在这里自动释放
 
-            // 更新最后配置更新时间戳
+            // 更新最后配置更新时间戳 - 使用超时
             {
-                let mut last_update = self.last_config_update.write().await;
-                *last_update = key.updated_at;
-            }
+                let last_update_lock_result = tokio::time::timeout(
+                    Duration::from_secs(5),
+                    self.last_config_update.write()
+                ).await;
+                
+                match last_update_lock_result {
+                    Ok(mut last_update) => {
+                        *last_update = key.updated_at;
+                    }
+                    Err(_) => {
+                        error!("Timeout waiting for config update timestamp write lock during service update");
+                        return Err(anyhow!("Config update timestamp write lock timeout during startup"));
+                    }
+                }
+            } // last_update 写锁在这里自动释放
 
             Ok(())
         } else {
@@ -392,30 +507,94 @@ impl MonitorService {
     }
 
     async fn start_symbol_monitor(&self, config: MonitorConfig) -> tokio::task::JoinHandle<()> {
-        let db = self.db.clone();
-        let gate_service = self.gate_service.clone();
-        let dingtalk_service = self.dingtalk_service.clone();
-        let is_running = self.is_running.clone();
+        Self::start_individual_symbol_monitor(
+            self.db.clone(),
+            self.gate_service.clone(),
+            self.dingtalk_service.clone(),
+            self.is_running.clone(),
+            config,
+        ).await
+    }
 
-        info!("Starting symbol monitor for {}", config.symbol);
+    /// 启动单个符号监控任务的静态版本
+    async fn start_individual_symbol_monitor(
+        db: SqlitePool,
+        gate_service: Arc<RwLock<GateService>>,
+        dingtalk_service: Arc<RwLock<DingTalkService>>,
+        is_running: Arc<RwLock<bool>>,
+        config: MonitorConfig,
+    ) -> tokio::task::JoinHandle<()> {
+        info!("Starting individual symbol monitor for {}", config.symbol);
         tokio::spawn(async move {
             let mut interval_timer = interval(Duration::from_secs(config.frequency as u64));
+            let mut consecutive_errors = 0u32;
+            const MAX_CONSECUTIVE_ERRORS: u32 = 5;
 
             loop {
                 interval_timer.tick().await;
 
                 // 检查是否应该继续运行
                 if !*is_running.read().await {
-                    warn!("Symbol monitor for {} is stopping", config.symbol);
+                    warn!("Individual symbol monitor for {} is stopping", config.symbol);
                     break;
                 }
 
-                if let Err(e) =
-                    Self::check_symbol_signals(&db, &gate_service, &dingtalk_service, &config).await
-                {
-                    error!("Error checking signals for {}: {}", config.symbol, e);
+                // 添加全局超时保护，防止单次检查时间过长
+                let check_result = tokio::time::timeout(
+                    Duration::from_secs(30), // 30秒超时
+                    Self::check_symbol_signals(&db, &gate_service, &dingtalk_service, &config)
+                ).await;
+
+                match check_result {
+                    Ok(Ok(_)) => {
+                        // 成功处理，重置错误计数
+                        if consecutive_errors > 0 {
+                            info!("Individual symbol monitor for {} recovered after {} errors", config.symbol, consecutive_errors);
+                            consecutive_errors = 0;
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        consecutive_errors += 1;
+                        error!("Error in individual monitor checking signals for {} (attempt {}/{}): {}", 
+                               config.symbol, consecutive_errors, MAX_CONSECUTIVE_ERRORS, e);
+                        
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                            error!("Individual symbol monitor for {} failed {} times consecutively, stopping task", 
+                                   config.symbol, MAX_CONSECUTIVE_ERRORS);
+                            
+                            // 发送警告通知
+                            if let Ok(dingtalk) = tokio::time::timeout(
+                                Duration::from_secs(5),
+                                dingtalk_service.read()
+                            ).await {
+                                let _ = dingtalk.send_text_message(&format!(
+                                    "⚠️ K线监控警告：{}监控任务连续失败{}次，已停止。请检查网络连接和API状态。",
+                                    config.symbol, MAX_CONSECUTIVE_ERRORS
+                                )).await;
+                            }
+                            break;
+                        }
+                        
+                        // 错误后稍微延长等待时间，避免频繁重试
+                        tokio::time::sleep(Duration::from_secs(
+                            std::cmp::min(consecutive_errors as u64 * 5, 30)
+                        )).await;
+                    }
+                    Err(_) => {
+                        consecutive_errors += 1;
+                        error!("Timeout in individual monitor checking signals for {} (attempt {}/{})", 
+                               config.symbol, consecutive_errors, MAX_CONSECUTIVE_ERRORS);
+                        
+                        if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
+                            error!("Individual symbol monitor for {} timed out {} times consecutively, stopping task", 
+                                   config.symbol, MAX_CONSECUTIVE_ERRORS);
+                            break;
+                        }
+                    }
                 }
             }
+            
+            warn!("Individual symbol monitor task for {} has exited", config.symbol);
         })
     }
 
@@ -430,12 +609,40 @@ impl MonitorService {
             config.symbol, config.interval_type
         );
 
-        // 获取K线数据
-        let gate = gate_service.read().await;
-        let klines = gate
-            .get_kline_data(&config.symbol, &config.interval_type, 50, "usdt")
-            .await?;
-        drop(gate);
+        // 获取K线数据 - 使用超时和快速释放锁的模式
+        let klines = {
+            // 添加锁获取超时
+            let gate_lock_result = tokio::time::timeout(
+                Duration::from_secs(10),
+                gate_service.read()
+            ).await;
+            
+            let gate = match gate_lock_result {
+                Ok(guard) => guard,
+                Err(_) => {
+                    error!("Timeout waiting for gate service lock for symbol: {}", config.symbol);
+                    return Err(anyhow!("Gate service lock timeout"));
+                }
+            };
+            
+            // 添加K线数据获取超时
+            let klines_result = tokio::time::timeout(
+                Duration::from_secs(10),
+                gate.get_kline_data(&config.symbol, &config.interval_type, 50, "usdt")
+            ).await;
+            
+            match klines_result {
+                Ok(Ok(klines)) => klines,
+                Ok(Err(e)) => {
+                    error!("Failed to get kline data for {}: {}", config.symbol, e);
+                    return Err(e);
+                }
+                Err(_) => {
+                    error!("Timeout getting kline data for symbol: {}", config.symbol);
+                    return Err(anyhow!("Kline data fetch timeout"));
+                }
+            }
+        }; // gate锁在这里自动释放
 
         if klines.len() < 5 {
             warn!("Insufficient kline data for {}", config.symbol);
@@ -510,10 +717,28 @@ impl MonitorService {
 
             // 发送钉钉通知
             if config.enable_dingtalk {
-                let dingtalk = dingtalk_service.read().await;
-                if dingtalk.has_webhook() {
-                    if let Err(e) = dingtalk.send_signal_alert(&signal).await {
-                        error!("Failed to send DingTalk alert: {}", e);
+                // 使用超时和快速释放锁
+                let dingtalk_result = tokio::time::timeout(
+                    Duration::from_secs(10),
+                    async {
+                        let dingtalk = dingtalk_service.read().await;
+                        if dingtalk.has_webhook() {
+                            dingtalk.send_signal_alert(&signal).await
+                        } else {
+                            Ok(())
+                        }
+                    }
+                ).await;
+                
+                match dingtalk_result {
+                    Ok(Ok(_)) => {
+                        info!("DingTalk signal alert sent successfully for {}", config.symbol);
+                    }
+                    Ok(Err(e)) => {
+                        error!("Failed to send DingTalk alert for {}: {}", config.symbol, e);
+                    }
+                    Err(_) => {
+                        error!("Timeout sending DingTalk alert for symbol: {}", config.symbol);
                     }
                 }
             }
@@ -531,52 +756,78 @@ impl MonitorService {
                     config,
                     contract.unwrap().order_price_round,
                 ) {
-                    // 下单
-                    {
-                        let order_data = build_order_data(
-                            &trading_signal.symbol,
-                            &config.order_type,
-                            if trading_signal.signal_type == "long" {
-                                "buy"
-                            } else {
-                                "sell"
-                            },
-                            trading_signal.entry_price,
-                            trading_signal.order_size,
-                            Some(trading_signal.take_profit),
-                            Some(trading_signal.stop_loss),
-                        );
+                    // 下单 - 使用超时和快速释放锁
+                    let order_result = tokio::time::timeout(
+                        Duration::from_secs(30),
+                        async {
+                            let order_data = build_order_data(
+                                &trading_signal.symbol,
+                                &config.order_type,
+                                if trading_signal.signal_type == "long" {
+                                    "buy"
+                                } else {
+                                    "sell"
+                                },
+                                trading_signal.entry_price,
+                                trading_signal.order_size,
+                                Some(trading_signal.take_profit),
+                                Some(trading_signal.stop_loss),
+                            );
 
-                        let gate_service = gate_service.read().await;
-                        match gate_service
-                            .place_order_with_stop_profit_loss(order_data, "usdt")
-                            .await
-                        {
-                            Ok(response) => {
-                                info!("Order placed successfully: {:?}", response);
-                            }
-                            Err(e) => {
-                                error!("Failed to acquire gate service: {}", e);
-                                return Ok(());
-                            }
+                            let gate_service = gate_service.read().await;
+                            gate_service
+                                .place_order_with_stop_profit_loss(order_data, "usdt")
+                                .await
+                        }
+                    ).await;
+
+                    match order_result {
+                        Ok(Ok(response)) => {
+                            info!("Order placed successfully for {}: {:?}", config.symbol, response);
+                        }
+                        Ok(Err(e)) => {
+                            error!("Failed to place order for {}: {}", config.symbol, e);
+                            // 下单失败不应该阻止后续处理，继续执行
+                        }
+                        Err(_) => {
+                            error!("Timeout placing order for symbol: {}", config.symbol);
+                            // 超时也不应该阻止后续处理，继续执行
                         }
                     }
 
-                    // 发送钉钉通知
+                    // 发送钉钉通知 - 使用超时和快速释放锁
                     if config.enable_dingtalk {
-                        let dingtalk = dingtalk_service.read().await;
-                        if dingtalk.has_webhook() {
-                            if let Err(e) = dingtalk.send_trading_signal(&trading_signal).await {
-                                error!("Failed to send DingTalk alert: {}", e);
+                        let dingtalk_result = tokio::time::timeout(
+                            Duration::from_secs(10),
+                            async {
+                                let dingtalk = dingtalk_service.read().await;
+                                if dingtalk.has_webhook() {
+                                    dingtalk.send_trading_signal(&trading_signal).await
+                                } else {
+                                    Ok(())
+                                }
+                            }
+                        ).await;
+                        
+                        match dingtalk_result {
+                            Ok(Ok(_)) => {
+                                info!("DingTalk trading signal sent successfully for {}", config.symbol);
+                            }
+                            Ok(Err(e)) => {
+                                error!("Failed to send DingTalk trading alert for {}: {}", config.symbol, e);
+                            }
+                            Err(_) => {
+                                error!("Timeout sending DingTalk trading alert for symbol: {}", config.symbol);
                             }
                         }
                     }
 
                     // 保存订单记录
-                    OrderRepository::save_from_trading_signal(db, &trading_signal, signal_id)
-                        .await?;
+                    if let Err(e) = OrderRepository::save_from_trading_signal(db, &trading_signal, signal_id).await {
+                        error!("Failed to save trading signal for {}: {}", config.symbol, e);
+                    }
 
-                    info!("Trading signal generated: {:?}", trading_signal);
+                    info!("Trading signal generated for {}: {:?}", config.symbol, trading_signal);
                 }
             }
         }
