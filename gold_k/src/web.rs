@@ -490,11 +490,19 @@ async fn place_order(
     {
         Ok(response) => {
             info!("Order placed successfully: {:?}", response);
-            Json(serde_json::json!({
-                "success": true,
-                "message": "下单成功",
-                "data": response
-            }))
+            if response.get("code").cloned() == Some(200.into()) {
+                Json(serde_json::json!({
+                    "success": true,
+                    "message": "下单成功",
+                    "data": response
+                }))
+            } else {
+                Json(serde_json::json!({
+                    "success": false,
+                    "message": format!("下单失败: {}", response.get("message").unwrap_or(&"未知错误".into())),
+                    "data": response
+                }))
+            }
             .into_response()
         }
         Err(e) => {

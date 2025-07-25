@@ -783,7 +783,11 @@ impl MonitorService {
 
                     match order_result {
                         Ok(Ok(response)) => {
-                            info!("Order placed successfully for {}: {:?}", config.symbol, response);
+                            if response.get("code").cloned() == Some(200.into()) {
+                                info!("Order placed successfully for {}: {:?}", config.symbol, response);
+                            } else {
+                                error!("Failed to place order for {}: {:?}", config.symbol, response);
+                            }
                         }
                         Ok(Err(e)) => {
                             error!("Failed to place order for {}: {}", config.symbol, e);
